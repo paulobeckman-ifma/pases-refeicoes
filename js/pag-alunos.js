@@ -51,7 +51,7 @@ export async function render(el, { cabecalho, perfil }) {
     a = a || { ativo: true };
     const novo = !a.id;
     const corpo = `
-      <div class="fotos-par">
+      <div class="fotos-par ficha-fotos">
         <div><div class="foto-box" data-fsuap>${a.foto_suap_id ? 'Carregando…' : 'Sem foto do SUAP'}<span class="rotulo">SUAP</span></div></div>
         <div><div class="foto-box" data-fbase>${a.foto_base_id ? 'Carregando…' : 'Sem foto de referência'}<span class="rotulo">Referência (webcam)</span></div>
           ${admin && !novo ? `<div class="linha-flex" style="margin-top:8px"><button class="btn pequeno" data-cap>${ico('camera')} Capturar na webcam</button>
