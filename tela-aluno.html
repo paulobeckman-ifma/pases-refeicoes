@@ -35,7 +35,7 @@
     .fotos.uma { grid-template-columns: 28vh; justify-content: center; }
     .fotos.uma .foto { height: 36vh; }
     .foto { position: relative; height: 30vh; width: 100%; background: #0b100d; border-radius: 16px; overflow: hidden; display: grid; place-items: center; color: var(--tinta-2); font-size: 18px; border: 3px solid transparent; }
-    .foto img { width: 100%; height: 100%; object-fit: cover; }
+    .foto img { width: 100%; height: 100%; object-fit: contain; }
     .foto span { position: absolute; left: 10px; top: 10px; background: rgba(0,0,0,.65); padding: 4px 12px; border-radius: 99px; font-size: 15px; color: #fff; }
     .foto.sem { color: #ffb4b7; font-weight: 700; }
     .icone { width: 84px; height: 84px; flex: none; border-radius: 50%; display: grid; place-items: center; margin: 0 auto; }
@@ -45,6 +45,9 @@
     .nome { font-size: 32px; font-weight: 800; line-height: 1.15; }
     .sub { font-size: 22px; color: var(--tinta-2); }
     .tecla { display: inline-block; border: 2px solid currentColor; border-radius: 10px; padding: 2px 14px; font-weight: 800; }
+    .opcoes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .opcao { font-size: 28px; font-weight: 800; padding: 14px; border-radius: 16px; border: 3px solid #36443d; background: #0b100d; }
+    .opcao.sel { background: var(--verde); border-color: #b7f0c5; }
     .girando { width: 70px; height: 70px; border: 7px solid #2a3831; border-top-color: var(--verde); border-radius: 50%; margin: 0 auto; animation: g 0.9s linear infinite; }
     @keyframes g { to { transform: rotate(360deg); } }
     .barra-ctrl { position: fixed; right: 12px; bottom: 12px; display: flex; gap: 8px; opacity: 0; transition: opacity .2s; }
@@ -56,7 +59,7 @@
 <body>
   <div class="topo">
     <img src="assets/logo-ifma.png" alt="IFMA" style="background:#fff;border-radius:10px;padding:4px">
-    <div><h1>PASES · Refeição</h1><small>Programa de Alimentação Estudantil</small></div>
+    <div><h1>PASES · Refeição e Lanche</h1><small>Programa de Alimentação Estudantil</small></div>
     <span class="espaco"></span>
     <span class="faixa" id="faixa"></span>
     <span class="hora" id="hora">--:--</span>
