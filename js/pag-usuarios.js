@@ -4,7 +4,7 @@ import { api, sessao } from './api.js';
 
 const PERFIS = {
   admin: 'Administrador: tudo, inclusive editar registros, alunos, usuários e configurações',
-  operador: 'Balcão: apenas registra refeições (notebook da lanchonete)',
+  operador: 'Balcão: apenas registra refeições (notebook do refeitório)',
   consulta: 'Consulta: vê painel, registros, relatórios e alunos (nutricionista, assistência social, direção)'
 };
 

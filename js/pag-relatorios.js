@@ -86,11 +86,14 @@ export async function render(el, { cabecalho, perfil }) {
   function tabelaHorario() {
     const hm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
     const mins = R.map((r) => { const [h, m] = r.h.split(':').map(Number); return h * 60 + m; });
+    const lanches = R.filter((r) => r.tp === 'lanche').map((r) => { const [h, m] = r.h.split(':').map(Number); return h * 60 + m; });
     const ini = Math.min(10 * 60 + 30, ...mins.map((m) => Math.floor(m / 15) * 15)), fim = Math.max(14 * 60 + 15, ...mins);
     const out = [];
     for (let m = ini; m <= fim; m += 15) {
-      const n = mins.filter((x) => x >= m && x < m + 15).length;
-      out.push({ faixa: `${hm(m)}–${hm(m + 15)}`, inicio: hm(m), total: n, fora: hm(m + 14) < cfg.horario_inicio || hm(m) > cfg.horario_fim });
+      const n = mins.filter((x) => x >= m && x < m + 15).length, nl = lanches.filter((x) => x >= m && x < m + 15).length;
+      const foraJanela = hm(m + 14) < cfg.horario_inicio || hm(m) > cfg.horario_fim;
+      // lanche não tem horário: a faixa só fica "fora" se houver refeição fora da janela
+      out.push({ faixa: `${hm(m)}–${hm(m + 15)}`, inicio: hm(m), total: n, lanche: nl, fora: foraJanela && n > nl, soLanche: n > 0 && n === nl });
     }
     return out;
   }
@@ -115,9 +118,9 @@ export async function render(el, { cabecalho, perfil }) {
           t.map((x) => [fmtData(x.data), x.dia, `<b>${x.total}</b>`, x.refeicao, x.lanche, x.facial, x.cpf, x.manual, x.fora, x.semfoto ? `<span class="selo vermelho">${x.semfoto}</span>` : 0, x.primeiro, x.ultimo]), [2, 3, 4, 5, 6, 7, 8, 9]);
     } else if (aba === 'horario') {
       const t = tabelaHorario();
-      c.innerHTML = `<div class="cartao" style="margin-bottom:16px"><h2>Distribuição por horário (faixas de 15 minutos)</h2>${barras(t.map((x) => ({ r: x.inicio, v: x.total, classe: x.fora ? 'fora' : '', dica: `${x.faixa}: ${x.total}` })), { titulo: 'Por horário' })}
-        <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário (${esc(cfg.horario_inicio)}–${esc(cfg.horario_fim)})</span><span><i style="background:#e0a33a"></i>fora do horário</span></div></div>` +
-        tabelaHtml(['Faixa', 'Refeições', '% do período', 'Situação'], t.filter((x) => x.total).map((x) => [x.faixa, x.total, fmtPct(x.total, R.length), x.fora ? '<span class="selo ambar">fora do horário</span>' : '<span class="selo verde">dentro</span>']), [1, 2]);
+      c.innerHTML = `<div class="cartao" style="margin-bottom:16px"><h2>Distribuição por horário (faixas de 15 minutos)</h2>${barras(t.map((x) => ({ r: x.inicio, v: x.total, classe: x.fora ? 'fora' : x.soLanche ? 'lanche' : '', dica: `${x.faixa}: ${x.total}${x.lanche ? ` (${x.lanche} lanche)` : ''}` })), { titulo: 'Por horário' })}
+        <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário (${esc(cfg.horario_inicio)}–${esc(cfg.horario_fim)})</span><span><i style="background:#e0a33a"></i>refeição fora do horário</span><span><i style="background:#3b7dd8"></i>lanche</span></div></div>` +
+        tabelaHtml(['Faixa', 'Registros', 'Lanche', '% do período', 'Situação'], t.filter((x) => x.total).map((x) => [x.faixa, x.total, x.lanche, fmtPct(x.total, R.length), x.fora ? '<span class="selo ambar">refeição fora do horário</span>' : x.soLanche ? '<span class="selo azul">lanche</span>' : '<span class="selo verde">dentro</span>']), [1, 2, 3]);
     } else if (aba === 'ocorrencias') {
       const t = ocorrencias();
       c.innerHTML = `<p class="mudo" style="margin-top:0">Registros sem foto, fora do horário, manuais, extras ou com observação.</p>` +
@@ -146,8 +149,8 @@ export async function render(el, { cabecalho, perfil }) {
         <div class="cartao"><h2>Atendimentos por dia</h2>${barras(pd.map((x) => ({ r: fmtDataCurta(x.data), v: x.total, dica: `${DIAS_CURTO[diaSemanaNum(x.data)]} ${fmtData(x.data)}: ${x.total}` })), { titulo: 'Atendimentos por dia' })}</div>
         <div class="cartao"><h2>Média por dia da semana</h2>${barras(porSemana, { titulo: 'Média por dia da semana' })}</div>
       </div>
-      <div class="cartao"><h2>Distribuição por horário</h2>${barras(tabelaHorario().map((x) => ({ r: x.inicio, v: x.total, classe: x.fora ? 'fora' : '', dica: `${x.faixa}: ${x.total}` })), { titulo: 'Por horário', altura: 180 })}
-        <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário</span><span><i style="background:#e0a33a"></i>fora do horário</span></div></div>`;
+      <div class="cartao"><h2>Distribuição por horário</h2>${barras(tabelaHorario().map((x) => ({ r: x.inicio, v: x.total, classe: x.fora ? 'fora' : x.soLanche ? 'lanche' : '', dica: `${x.faixa}: ${x.total}${x.lanche ? ` (${x.lanche} lanche)` : ''}` })), { titulo: 'Por horário', altura: 180 })}
+        <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário</span><span><i style="background:#e0a33a"></i>refeição fora do horário</span><span><i style="background:#3b7dd8"></i>lanche</span></div></div>`;
   }
 
   function desenharAlunos() {

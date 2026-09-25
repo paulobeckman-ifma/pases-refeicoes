@@ -3,7 +3,7 @@ import { $, $$, esc, ico, aviso, CFG } from './util.js';
 import { rpc, api, sessao, relogio, traduzir } from './api.js';
 import { montarBalcao } from './kiosk.js';
 
-export const VERSAO = '1.2.0';
+export const VERSAO = '1.3.0';
 const raiz = $('#app');
 let desmontar = null;
 
@@ -65,7 +65,7 @@ function shell(rota) {
   $$('.nav a').forEach((a) => (a.onclick = () => $('#lateral').classList.remove('aberta')));
   if (u.perfil === 'admin' && !u.deve_trocar_senha) {
     api('faces_listar', { p_pendentes: true }).then((l) => {
-      if (l.length) { const a = $('[data-rota=faces]'); if (a) a.insertAdjacentHTML('beforeend', `<span class="contagem">${l.length}</span>`); }
+      const a = $('[data-rota=faces]'); if (a) { a.querySelectorAll('.contagem').forEach((x) => x.remove()); if (l.length) a.insertAdjacentHTML('beforeend', `<span class="contagem">${l.length}</span>`); }
     }).catch(() => {});
   }
   return $('#conteudo');

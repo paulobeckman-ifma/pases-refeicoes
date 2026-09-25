@@ -28,9 +28,10 @@ export async function render(el, { cabecalho, perfil }) {
   const ini = cfg.horario_inicio, fim = cfg.horario_fim;
   const hm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
   const porFaixa = faixas.map((m) => {
-    const n = hoje.filter((r) => { const [hh, mm] = r.h.split(':').map(Number); const t = hh * 60 + mm; return t >= m && t < m + 15; }).length;
-    const foraFaixa = hm(m + 14) < ini || hm(m) > fim;
-    return { r: hm(m), v: n, classe: foraFaixa ? 'fora' : '', dica: `${hm(m)}–${hm(m + 15)}: ${n}` };
+    const nas = hoje.filter((r) => { const [hh, mm] = r.h.split(':').map(Number); const t = hh * 60 + mm; return t >= m && t < m + 15; });
+    const n = nas.length, nl = nas.filter((r) => r.tp === 'lanche').length;
+    const foraFaixa = (hm(m + 14) < ini || hm(m) > fim) && n > nl;
+    return { r: hm(m), v: n, classe: foraFaixa ? 'fora' : n && n === nl ? 'lanche' : '', dica: `${hm(m)}–${hm(m + 15)}: ${n}${nl ? ` (${nl} lanche)` : ''}` };
   });
 
   // alertas
@@ -56,9 +57,9 @@ export async function render(el, { cabecalho, perfil }) {
       <div class="kpi"><span>Reconhecimento facial</span><b>${fmtPct(facial, hoje.length)}</b><small>${facial} de ${hoje.length} registros</small></div>
     </div>
     <div class="duas-col">
-      <div class="cartao"><h2>Refeições por dia · últimos 14 dias</h2>${barras(porDia, { titulo: 'Refeições por dia' })}</div>
+      <div class="cartao"><h2>Atendimentos por dia · últimos 14 dias</h2>${barras(porDia, { titulo: 'Atendimentos por dia' })}</div>
       <div class="cartao"><h2>Hoje, por horário (15 min)</h2>${barras(porFaixa, { titulo: 'Refeições por faixa de horário' })}
-        <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário</span><span><i style="background:#e0a33a"></i>fora do horário</span></div></div>
+        <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário</span><span><i style="background:#e0a33a"></i>refeição fora do horário</span><span><i style="background:#3b7dd8"></i>lanche</span></div></div>
     </div>
     <div class="cartao"><div class="linha-flex" style="margin-bottom:10px"><h2>Últimos registros de hoje</h2><span class="espaco"></span><a href="#/registros" class="btn pequeno">Ver todos</a></div>
       ${hoje.length ? `<div class="tabela-wrap"><table class="tabela"><thead><tr><th>Hora</th><th>Aluno</th><th>Curso</th><th>Método</th><th>Situação</th></tr></thead><tbody>
