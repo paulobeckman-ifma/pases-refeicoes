@@ -69,6 +69,12 @@ export function diasEntre(a, b) { return Math.round((new Date(b + 'T12:00:00Z') 
 export const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
 // ------------------------------------------------------------------ CPF
+/** Turma = sigla do curso + ano de ingresso, lidos da matrícula do SUAP (ex.: 20251STI0009 -> "STI 2025"). */
+export function turmaDe(matricula) {
+  const m = /^(\d{4})[12]([A-Z]+)(?:\.[A-Z]+)?\d{3,5}$/i.exec(String(matricula || '').trim());
+  return m ? `${m[2].toUpperCase()} ${m[1]}` : '';
+}
+export const TIPO = { refeicao: 'Refeição', lanche: 'Lanche' };
 export const soDigitos = (s) => String(s ?? '').replace(/\D/g, '');
 export function cpfValido(c) {
   c = soDigitos(c);

@@ -20,7 +20,7 @@ export async function render(el, { cabecalho, perfil }) {
 
   // por dia (14 dias)
   const dias = []; for (let i = 13; i >= 0; i--) dias.push(addDias(h, -i));
-  const porDia = dias.map((d) => { const n = lista.filter((r) => r.dt === d).length; return { r: fmtDataCurta(d), v: n, dica: `${DIAS_CURTO[diaSemanaNum(d)]} ${fmtDataCurta(d)}: ${n} refeições` }; });
+  const porDia = dias.map((d) => { const n = lista.filter((r) => r.dt === d).length; return { r: fmtDataCurta(d), v: n, dica: `${DIAS_CURTO[diaSemanaNum(d)]} ${fmtDataCurta(d)}: ${n} atendimentos` }; });
   // por faixa de 15 min hoje
   const minutos = hoje.map((r) => { const [hh, mm] = r.h.split(':').map(Number); return hh * 60 + mm; });
   const iniF = Math.min(10 * 60 + 30, ...minutos.map((m) => Math.floor(m / 15) * 15)), fimF = Math.max(14 * 60 + 15, ...minutos);
@@ -50,7 +50,7 @@ export async function render(el, { cabecalho, perfil }) {
       perfil !== 'consulta' ? `<a class="btn primario" href="#/balcao">${ico('balcao')} Abrir balcão</a>` : '') + `
     ${alertas.map((a) => `<div class="caixa aviso-caixa" style="margin-bottom:10px">${ico('alerta', 'nao-imprimir')} ${a}</div>`).join('')}
     <div class="kpis">
-      <div class="kpi"><span>Refeições hoje</span><b>${fmtNum(hoje.length)}</b><small>${fmtPct(hoje.length, ativos)} dos ${ativos} ativos</small></div>
+      <div class="kpi"><span>Atendimentos hoje</span><b>${fmtNum(hoje.length)}</b><small>${hoje.filter((r) => r.tp !== 'lanche').length} refeição · ${hoje.filter((r) => r.tp === 'lanche').length} lanche · ${fmtPct(hoje.length, ativos)} dos ${ativos} ativos</small></div>
       <div class="kpi ${fora ? 'kpi-aviso' : ''}"><span>Fora do horário</span><b>${fora}</b><small>${fmtPct(fora, hoje.length)} dos registros</small></div>
       <div class="kpi ${semFoto ? 'kpi-alerta' : ''}"><span>Sem foto</span><b>${semFoto}</b><small>todos com justificativa</small></div>
       <div class="kpi"><span>Reconhecimento facial</span><b>${fmtPct(facial, hoje.length)}</b><small>${facial} de ${hoje.length} registros</small></div>

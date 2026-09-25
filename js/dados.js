@@ -24,7 +24,8 @@ export function periodos(cfg) {
   ];
   (cfg?.semestres || []).forEach((s) => lista.push({ id: 'sem_' + s.nome, rotulo: `Semestre ${s.nome}`, ini: s.inicio, fim: s.fim < h ? s.fim : h }));
   lista.push({ id: 'ano', rotulo: `Ano de ${ano}`, ini: `${ano}-01-01`, fim: h });
-  lista.push({ id: 'personalizado', rotulo: 'Personalizado…' });
+  lista.push({ id: 'dia', rotulo: 'Um dia específico…' });
+  lista.push({ id: 'personalizado', rotulo: 'Intervalo de datas…' });
   return lista;
 }
 
@@ -34,20 +35,25 @@ export function seletorPeriodo(el, cfg, aoMudar, padrao = 'hoje') {
   const salvo = sessionStorage.getItem('pases_periodo_' + padrao);
   let atual = lista.find((p) => p.id === (salvo || padrao)) || lista[0];
   el.innerHTML = `<label class="campo"><span>Período</span><select data-p>${lista.map((p) => `<option value="${p.id}" ${p.id === atual.id ? 'selected' : ''}>${esc(p.rotulo)}</option>`).join('')}</select></label>
+    <label class="campo oculto" data-pd><span>Dia</span><input type="date" data-dia></label>
     <label class="campo oculto" data-pi><span>De</span><input type="date" data-ini></label>
     <label class="campo oculto" data-pf><span>Até</span><input type="date" data-fim></label>`;
-  const sel = el.querySelector('[data-p]'), ini = el.querySelector('[data-ini]'), fim = el.querySelector('[data-fim]');
+  const sel = el.querySelector('[data-p]'), dia = el.querySelector('[data-dia]'), ini = el.querySelector('[data-ini]'), fim = el.querySelector('[data-fim]');
   const emitir = () => {
     const p = lista.find((x) => x.id === sel.value);
     sessionStorage.setItem('pases_periodo_' + padrao, p.id);
-    const pers = p.id === 'personalizado';
+    const pers = p.id === 'personalizado', umDia = p.id === 'dia';
     el.querySelector('[data-pi]').classList.toggle('oculto', !pers); el.querySelector('[data-pf]').classList.toggle('oculto', !pers);
-    if (pers) {
+    el.querySelector('[data-pd]').classList.toggle('oculto', !umDia);
+    if (umDia) {
+      if (!dia.value) dia.value = hojeISO();
+      aoMudar({ ini: dia.value, fim: dia.value, rotulo: `Dia ${dia.value.split('-').reverse().join('/')}` });
+    } else if (pers) {
       if (!ini.value) { ini.value = addDias(hojeISO(), -6); fim.value = hojeISO(); }
       if (ini.value > fim.value) return;
       aoMudar({ ini: ini.value, fim: fim.value, rotulo: `${ini.value.split('-').reverse().join('/')} a ${fim.value.split('-').reverse().join('/')}` });
     } else aoMudar({ ini: p.ini, fim: p.fim, rotulo: p.rotulo });
   };
-  sel.onchange = emitir; ini.onchange = emitir; fim.onchange = emitir;
+  sel.onchange = emitir; dia.onchange = emitir; ini.onchange = emitir; fim.onchange = emitir;
   emitir();
 }

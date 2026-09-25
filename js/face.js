@@ -27,6 +27,9 @@ export function carregarFace() {
   return carregando;
 }
 
+/** Moldura oval do balcão, em frações do quadro da câmera (centro 0,5 × 0,5; raios horizontal e vertical). */
+export const MOLDURA = { rx: 0.2, ry: 0.36 };
+
 const maior = (lista) => lista.reduce((a, b) => (!a || b.detection.box.area > a.detection.box.area ? b : a), null);
 
 /** Detecção rápida em vídeo ao vivo. Retorna o maior rosto com descritor, ou null. */
@@ -34,8 +37,16 @@ export async function detectarAoVivo(video) {
   const fa = await carregarFace();
   const r = await fa.detectAllFaces(video, new fa.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
     .withFaceLandmarks().withFaceDescriptors();
-  const f = maior(r); if (!f) return { rosto: null, quantidade: 0 };
-  return { rosto: f, quantidade: r.length };
+  // Fila atrás do aluno: só vale o rosto com o centro dentro da moldura oval; entre esses, o maior e mais centralizado.
+  const vw = video.videoWidth || 1, vh = video.videoHeight || 1;
+  const pontos = r.map((f) => {
+    const b = f.detection.box, dx = ((b.x + b.width / 2) / vw - 0.5) / MOLDURA.rx, dy = ((b.y + b.height / 2) / vh - 0.5) / MOLDURA.ry;
+    const dist = Math.hypot(dx, dy);                 // 0 = centro, 1 = borda da moldura
+    return { f, dist, nota: (b.width / vw) * (1.2 - Math.min(dist, 1)) };
+  }).filter((x) => x.dist <= 1);
+  if (!pontos.length) return { rosto: null, quantidade: r.length, foraMoldura: r.length > 0 };
+  pontos.sort((a, b) => b.nota - a.nota);
+  return { rosto: pontos[0].f, quantidade: r.length };
 }
 
 /** Descritor de alta qualidade a partir de imagem/canvas (usado em cadastro e foto base). */
