@@ -169,8 +169,10 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: 14px; }
 
 /* ------------------------------------------------ fotos */
 .fotos-par { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* ficha do aluno: caixa em pé, para a foto do SUAP (retrato) aparecer inteira */
+.ficha-fotos .foto-box { aspect-ratio: 3 / 4; max-height: 50vh; width: 100%; background: #1b2420; color: #cfd8d3; }
 .foto-box { background: #eef1f0; border-radius: 10px; aspect-ratio: 4 / 3; display: grid; place-items: center; overflow: hidden; position: relative; color: var(--tinta-3); font-size: 13px; text-align: center; }
-.foto-box img { width: 100%; height: 100%; object-fit: contain; }
+.foto-box img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .foto-box .rotulo { position: absolute; left: 8px; top: 8px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 99px; }
 .foto-box.sem { background: var(--vermelho-claro); color: var(--vermelho); font-weight: 650; }
 .miniatura { width: 38px; height: 38px; border-radius: 8px; object-fit: cover; background: #eef1f0; display: block; }
