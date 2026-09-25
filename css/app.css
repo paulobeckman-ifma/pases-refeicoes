@@ -140,6 +140,7 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: 14px; }
 .grafico text { font-size: 11px; fill: var(--tinta-3); font-family: var(--fonte); }
 .grafico .barra { fill: var(--verde); }
 .grafico .barra.fora { fill: #e0a33a; }
+.grafico .barra.lanche { fill: #3b7dd8; }
 .grafico .barra:hover { opacity: .8; }
 .dica { position: fixed; pointer-events: none; background: var(--tinta); color: #fff; padding: 6px 9px; border-radius: 6px; font-size: 12.5px; z-index: 200;
   transform: translate(-50%, calc(-100% - 10px)); white-space: nowrap; }
