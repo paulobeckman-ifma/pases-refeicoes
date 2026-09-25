@@ -94,21 +94,39 @@ export async function render(el, { cabecalho, perfil }) {
       }).catch(() => {});
     }
     if (!admin || novo) return;
+    // A ficha continua aberta: a foto aparece no quadro "Referência" com o resultado, para o administrador conferir.
+    const boxBase = () => $('[data-fbase]', el2);
+    const estadoBase = (dataUrl, selo) => {
+      const b = boxBase(); if (!b) return;
+      b.innerHTML = `<img src="${dataUrl}" alt=""><span class="rotulo">Referência (webcam)</span>` +
+        `<span class="selo ${selo.cor}" style="position:absolute;left:8px;bottom:8px">${selo.texto}</span>`;
+    };
     const usarFoto = async (dataUrl, canvas) => {
+      estadoBase(dataUrl, { cor: 'ambar', texto: 'Enviando…' });
       try {
-        aviso('Enviando foto…');
         const up = await gas('upload', { tipo: 'base', nome: `base_${a.matricula || a.id}`, dados: dataUrl });
         guardarFotoLocal(up.id, dataUrl);
         await api('aluno_foto', { p_aluno_id: a.id, p_campo: 'base', p_foto_id: up.id });
+        a.foto_base_id = up.id;
+        estadoBase(dataUrl, { cor: 'ambar', texto: 'Foto anexada · procurando o rosto…' });
         await carregarFace();
         const r = await descritorDeImagem(canvas || await imagemDeDataUrl(dataUrl));
-        if (!r) aviso('Foto salva, mas nenhum rosto foi detectado nela. Tente outra foto, de frente e bem iluminada.', 'erro');
-        else { await api('salvar_face', { p_aluno_id: a.id, p_descriptor: r.descritor, p_origem: 'manual', p_foto_id: up.id }); aviso('Foto de referência salva.', 'ok'); }
-        m.fechar(); recarregar();
-      } catch (e) { aviso(e.message, 'erro'); }
+        if (!r) {
+          estadoBase(dataUrl, { cor: 'vermelho', texto: 'Foto anexada, mas sem rosto detectado' });
+          aviso('Foto anexada, mas nenhum rosto foi detectado nela. Envie outra, de frente e bem iluminada.', 'erro');
+        } else {
+          await api('salvar_face', { p_aluno_id: a.id, p_descriptor: r.descritor, p_origem: 'manual', p_foto_id: up.id });
+          estadoBase(dataUrl, { cor: 'verde', texto: 'Foto anexada · referência facial salva' });
+          aviso('Foto de referência salva.', 'ok');
+        }
+        recarregar();
+      } catch (e) {
+        estadoBase(dataUrl, { cor: 'vermelho', texto: 'Falha no envio' });
+        aviso(e.message, 'erro');
+      }
     };
     $('[data-cap]', el2).onclick = async () => { const r = await capturaWebcam(); if (r) usarFoto(r.dataUrl, r.canvas); };
-    $('[data-arq]', el2).onchange = async (e) => { const f = e.target.files[0]; if (!f) return; const r = await reduzirImagem(f, 480); usarFoto(r.dataUrl, r.canvas); };
+    $('[data-arq]', el2).onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; const r = await reduzirImagem(f, 480); usarFoto(r.dataUrl, r.canvas); };
     const ap = $('[data-apagaref]', el2);
     if (ap) ap.onclick = async () => {
       if (!(await confirmar('Apagar todas as referências faciais deste aluno? Ele precisará digitar o CPF no próximo almoço para criar uma nova.', { perigo: true, ok: 'Apagar' }))) return;
@@ -122,9 +140,18 @@ export async function render(el, { cabecalho, perfil }) {
       titulo: 'Capturar foto de referência', corpo: `<div class="foto-box" style="aspect-ratio:4/3;background:#000"><video data-v autoplay muted playsinline style="width:100%;height:100%;object-fit:cover;${preferencias.espelhar ? 'transform:scaleX(-1)' : ''}"></video></div>
         <div class="foto-box oculto" data-prev></div><p class="mudo pequeno" style="margin:0">Aluno de frente, rosto inteiro visível, sem boné ou óculos escuros.</p>`,
       aoAbrir: async (el) => { try { stream = await abrirCamera($('[data-v]', el)); } catch (e) { aviso(e.message, 'erro'); } },
-      botoes: [{ texto: 'Cancelar' }, { texto: `${ico('camera')} Capturar`, classe: 'primario', acao: (fechar, el) => {
+      // 1º clique captura e mostra a prévia; 2º clique ("Usar esta foto") confirma. "Tirar outra" volta ao vídeo.
+      botoes: [{ texto: 'Cancelar' }, { texto: 'Tirar outra', classe: 'oculto', fechar: false, acao: (fechar, el) => {
+        cap = null; $('[data-prev]', el).classList.add('oculto'); $('[data-v]', el).parentElement.classList.remove('oculto');
+        const bs = el.querySelectorAll('footer .btn'); bs[1].classList.add('oculto'); bs[2].innerHTML = `${ico('camera')} Capturar`;
+        return false;
+      } }, { texto: `${ico('camera')} Capturar`, classe: 'primario', acao: (fechar, el) => {
+        if (cap) { fechar(cap); return false; }
         cap = capturar($('[data-v]', el), 480, 0.85); if (!cap) { aviso('Câmera sem imagem.', 'erro'); return false; }
-        fechar(cap); return false;
+        const p = $('[data-prev]', el); p.innerHTML = `<img src="${cap.dataUrl}" alt=""><span class="rotulo">Prévia</span>`;
+        p.classList.remove('oculto'); $('[data-v]', el).parentElement.classList.add('oculto');
+        const bs = el.querySelectorAll('footer .btn'); bs[1].classList.remove('oculto'); bs[2].innerHTML = 'Usar esta foto';
+        return false;
       } }]
     });
     return m.promessa.finally(() => pararCamera(stream));
