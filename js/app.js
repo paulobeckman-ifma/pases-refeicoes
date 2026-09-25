@@ -3,7 +3,7 @@ import { $, $$, esc, ico, aviso, CFG } from './util.js';
 import { rpc, api, sessao, relogio, traduzir } from './api.js';
 import { montarBalcao } from './kiosk.js';
 
-export const VERSAO = '1.1.0';
+export const VERSAO = '1.2.0';
 const raiz = $('#app');
 let desmontar = null;
 

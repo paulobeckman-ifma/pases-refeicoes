@@ -1,5 +1,5 @@
 // Alunos: cadastro, importação, fotos (SUAP e webcam) e referências faciais
-import { $, $$, esc, ico, modal, aviso, confirmar, baixarCsv, lerCsv, fmtData, fmtCpf, cpfValido, soDigitos, normalizar, debounce, hojeISO, addDias, MESES } from './util.js';
+import { $, $$, esc, ico, modal, aviso, confirmar, pedirTexto, fmtDataHora, baixarCsv, lerCsv, fmtData, fmtCpf, cpfValido, soDigitos, normalizar, debounce, hojeISO, addDias, MESES } from './util.js';
 import { api, gas, gasConfigurado, foto, fotos, guardarFotoLocal } from './api.js';
 import { abrirCamera, pararCamera, capturar, reduzirImagem, preferencias } from './camera.js';
 import { carregarFace, descritorDeImagem, imagemDeDataUrl } from './face.js';
@@ -16,7 +16,7 @@ export async function render(el, { cabecalho, perfil }) {
     <div class="barra-filtros">
       <label class="campo" style="min-width:260px"><span>Buscar</span><input type="search" id="a-busca" placeholder="Nome, matrícula ou CPF"></label>
       <label class="campo"><span>Mostrar</span><select id="a-filtro">
-        <option value="ativos">Ativos</option><option value="">Todos</option><option value="inativos">Inativos</option>
+        <option value="ativos">Ativos</option><option value="">Todos</option><option value="inativos">Inativos</option><option value="cancelados">Cadastro cancelado</option>
         <option value="semcpf">Sem CPF</option><option value="semref">Sem referência facial</option><option value="semsuap">Sem foto do SUAP</option><option value="pend">Com rosto a validar</option></select></label>
     </div>
     <div id="a-resumo" class="pequeno mudo" style="margin-bottom:8px"></div>
@@ -28,15 +28,16 @@ export async function render(el, { cabecalho, perfil }) {
     const t = lista.filter((a) => {
       if (q && !(normalizar(`${a.nome} ${a.matricula}`).includes(q) || (qd.length >= 3 && (a.cpf || '').includes(qd)))) return false;
       if (f === 'ativos' && !a.ativo) return false; if (f === 'inativos' && a.ativo) return false;
+      if (f === 'cancelados' && !a.cancelado_em) return false;
       if (f === 'semcpf' && a.cpf) return false; if (f === 'semref' && a.faces) return false;
       if (f === 'semsuap' && a.foto_suap_id) return false; if (f === 'pend' && !a.faces_pendentes) return false;
       return true;
     });
     const at = lista.filter((a) => a.ativo);
-    $('#a-resumo').innerHTML = `${t.length} exibido(s) · ${at.length} ativos · ${at.filter((a) => !a.cpf).length} ativos sem CPF · ${at.filter((a) => !a.faces).length} ativos sem referência facial`;
+    $('#a-resumo').innerHTML = `${t.length} exibido(s) · ${at.length} ativos · ${lista.filter((a) => a.cancelado_em).length} cancelado(s) · ${at.filter((a) => !a.cpf).length} ativos sem CPF · ${at.filter((a) => !a.faces).length} ativos sem referência facial`;
     $('#a-corpo').innerHTML = t.map((a) => {
       const fc = a.faces || {};
-      return `<tr class="clicavel" data-id="${a.id}"><td>${esc(a.nome)}${a.ativo ? '' : ' <span class="selo">inativo</span>'}<br><small class="mudo">${esc(a.matricula || '')}</small></td>
+      return `<tr class="clicavel" data-id="${a.id}"><td>${esc(a.nome)}${a.cancelado_em ? ' <span class="selo vermelho-suave">cancelado</span>' : a.ativo ? '' : ' <span class="selo">inativo</span>'}<br><small class="mudo">${esc(a.matricula || '')}</small></td>
         <td class="pequeno">${esc(a.curso || '')}</td><td class="num pequeno">${a.cpf ? esc(admin ? fmtCpf(a.cpf) : a.cpf) : '<span class="selo vermelho-suave">sem CPF</span>'}</td>
         <td class="pequeno">${esc(a.situacao_suap || '')}</td>
         <td>${fc.suap ? '<span class="selo verde">SUAP</span> ' : ''}${fc.manual ? '<span class="selo verde">cadastro</span> ' : ''}${fc.webcam ? `<span class="selo azul">balcão ×${fc.webcam}</span> ` : ''}${a.faces_pendentes ? '<span class="selo ambar">validar</span>' : ''}${!a.faces ? '<span class="selo">sem referência</span>' : ''}</td>
@@ -67,12 +68,33 @@ export async function render(el, { cabecalho, perfil }) {
         <label class="campo"><span>Situação no SUAP</span><input type="text" name="situacao_suap" value="${esc(a.situacao_suap || '')}" ${admin ? '' : 'disabled'}></label>
         <label class="campo"><span>Link da foto no SUAP</span><input type="text" name="foto_suap_url" value="${esc(a.foto_suap_url || '')}" ${admin ? '' : 'disabled'}></label>
         <label class="campo" style="grid-column:1/-1"><span>Observação</span><textarea name="observacao" ${admin ? '' : 'disabled'}>${esc(a.observacao || '')}</textarea></label>
-        <label class="check"><input type="checkbox" name="ativo" ${a.ativo ? 'checked' : ''} ${admin ? '' : 'disabled'}> Ativo no PASES (pode registrar refeição)</label>
+        <label class="check"><input type="checkbox" name="ativo" ${a.ativo ? 'checked' : ''} ${admin && !a.cancelado_em ? '' : 'disabled'}> Ativo no PASES (pode registrar refeição)${a.cancelado_em ? ' · use "Reativar cadastro"' : ''}</label>
       </form>
+      ${a.cancelado_em ? `<div class="caixa erro-caixa"><b>Cadastro cancelado</b> em ${fmtDataHora(a.cancelado_em)}. Motivo: ${esc(a.cancelado_motivo || '')}. O histórico de refeições foi mantido; as referências faciais foram apagadas.</div>` : ''}
       ${novo ? '' : `<div><h3 style="margin-bottom:8px">Refeições nos últimos 12 meses</h3><div data-hist class="pequeno mudo">Carregando…</div></div>`}`;
     const m = modal({
       titulo: novo ? 'Novo aluno' : a.nome, largo: true, corpo,
-      botoes: admin ? [{ texto: 'Cancelar' }, { texto: 'Salvar', classe: 'primario', acao: async (fechar, el) => {
+      botoes: admin ? [
+        ...(novo ? [] : a.cancelado_em ? [
+          { texto: `${ico('atualizar')} Reativar cadastro`, acao: async (fechar) => {
+            if (!(await confirmar(`Reativar o cadastro de ${esc(a.nome)}? Ele volta a poder registrar no balcão.`))) return false;
+            try { await api('aluno_reativar', { p_aluno_id: a.id }); aviso('Cadastro reativado.', 'ok'); fechar(); recarregar(); } catch (e) { aviso(e.message, 'erro'); }
+            return false; } },
+          ...(a.total ? [] : [{ texto: `${ico('lixo')} Excluir definitivamente`, classe: 'perigo', acao: async (fechar) => {
+            if (!(await confirmar(`Excluir definitivamente o cadastro de ${esc(a.nome)}? Não há refeições registradas. Esta ação não pode ser desfeita.`, { perigo: true, ok: 'Excluir' }))) return false;
+            try { await api('aluno_excluir', { p_aluno_id: a.id }); aviso('Cadastro excluído.', 'ok'); fechar(); recarregar(); } catch (e) { aviso(e.message, 'erro'); }
+            return false; } }])
+        ] : [
+          { texto: `${ico('lixo')} Cancelar cadastro`, classe: 'perigo', acao: async (fechar) => {
+            const motivo = await pedirTexto('Cancelar cadastro', `Motivo do cancelamento de ${a.nome} (fica na auditoria)`,
+              { sugestoes: ['Saiu do programa', 'Concluiu o curso', 'Transferido', 'Evadido', 'Desistiu do benefício'] });
+            if (!motivo) return false;
+            try { const r = await api('aluno_cancelar', { p_aluno_id: a.id, p_motivo: motivo });
+              aviso(`Cadastro cancelado.${r.referencias_apagadas ? ` ${r.referencias_apagadas} referência(s) facial(is) apagada(s).` : ''}`, 'ok'); fechar(); recarregar();
+            } catch (e) { aviso(e.message, 'erro'); }
+            return false; } }
+        ]),
+        { texto: 'Fechar' }, { texto: 'Salvar', classe: 'primario', acao: async (fechar, el) => {
         const f = $('[data-form]', el);
         const cpf = soDigitos(f.cpf.value);
         if (cpf && !cpfValido(cpf)) { aviso('CPF inválido.', 'erro'); return false; }
@@ -255,8 +277,8 @@ export async function render(el, { cabecalho, perfil }) {
   $('#a-busca').oninput = debounce(filtrar, 200);
   $('#a-filtro').onchange = filtrar;
   $('#a-corpo').onclick = (e) => { const tr = e.target.closest('tr[data-id]'); if (tr) ficha(lista.find((a) => a.id === tr.dataset.id)); };
-  $('#a-csv').onclick = () => baixarCsv('pases_alunos', ['nome', 'matricula', 'cpf', 'curso', 'nivel', 'situacao_suap', 'ativo', 'refeicoes', 'ultima', 'referencia_facial'],
-    lista.map((a) => [a.nome, a.matricula, a.cpf, a.curso, a.nivel, a.situacao_suap, a.ativo ? 'sim' : 'não', a.total, fmtData(a.ultima), a.faces ? 'sim' : 'não']));
+  $('#a-csv').onclick = () => baixarCsv('pases_alunos', ['nome', 'matricula', 'cpf', 'curso', 'nivel', 'situacao_suap', 'ativo', 'cancelado_em', 'motivo_cancelamento', 'refeicoes', 'ultima', 'referencia_facial'],
+    lista.map((a) => [a.nome, a.matricula, a.cpf, a.curso, a.nivel, a.situacao_suap, a.ativo ? 'sim' : 'não', a.cancelado_em ? fmtData(a.cancelado_em.slice(0, 10)) : '', a.cancelado_motivo || '', a.total, fmtData(a.ultima), a.faces ? 'sim' : 'não']));
   if (admin) {
     $('#a-novo').onclick = () => ficha(null);
     $('#a-imp').onclick = importar;

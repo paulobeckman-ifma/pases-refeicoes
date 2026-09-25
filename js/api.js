@@ -29,6 +29,8 @@ const MSG = {
   JA_EXISTE_REFEICAO_NESSE_DIA: 'Este aluno já tem refeição registrada nesse dia. Marque como refeição extra, se for o caso.',
   HORARIO_INVALIDO: 'Horário inválido: o início deve ser antes do fim.',
   NAO_ENCONTRADO: 'Registro não encontrado.',
+  ALUNO_COM_HISTORICO: 'Este aluno tem refeições registradas: o cadastro pode ser cancelado, mas não excluído (o histórico precisa ser mantido).',
+  TIPO_INVALIDO: 'Tipo inválido (use Refeição ou Lanche).',
   GAS_NAO_CONFIGURADO: 'O Apps Script (Google Drive) ainda não foi configurado em config.js.',
   APPS_SCRIPT_NAO_CONECTADO: 'O Drive ainda não foi conectado. Use "Conectar ao Drive" em Configurações.',
   SEGREDO_INVALIDO: 'O Apps Script perdeu a conexão com o banco. Use "Conectar ao Drive" novamente.',
