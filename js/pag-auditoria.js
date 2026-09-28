@@ -6,7 +6,9 @@ const ACOES = {
   criar_aluno: 'Cadastrou aluno', editar_aluno: 'Editou aluno', importar_alunos: 'Importou alunos', foto_aluno_suap: 'Definiu foto do SUAP', foto_aluno_base: 'Definiu foto de referência',
   editar_refeicao: 'Editou registro', excluir_refeicao: 'Excluiu registro', restaurar_refeicao: 'Restaurou registro', registro_manual: 'Registro manual/extra',
   criar_usuario: 'Criou usuário', editar_usuario: 'Editou usuário', trocar_senha: 'Trocou a própria senha', config: 'Alterou configuração',
-  face_aprovada: 'Aprovou referência facial', face_rejeitada: 'Rejeitou referência facial', faces_apagadas: 'Apagou referências faciais', conectar_apps_script: 'Conectou o Drive'
+  face_aprovada: 'Aprovou referência facial', face_rejeitada: 'Rejeitou referência facial', faces_apagadas: 'Apagou referências faciais', conectar_apps_script: 'Conectou o Drive',
+  solicitar_troca: 'Pediu troca de modalidade', aprovar_troca: 'Aprovou troca de modalidade', recusar_troca: 'Recusou troca de modalidade',
+  cancelar_aluno: 'Cancelou cadastro', reativar_aluno: 'Reativou cadastro', excluir_aluno: 'Excluiu aluno'
 };
 
 export async function render(el, { cabecalho }) {

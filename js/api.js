@@ -24,6 +24,8 @@ const MSG = {
   LOGIN_INVALIDO_FORMATO: 'Login: use de 3 a 40 letras minúsculas, números, ponto, hífen ou sublinhado.',
   NAO_PODE_REBAIXAR_A_SI: 'Você não pode desativar nem trocar o perfil da sua própria conta.',
   ULTIMO_ADMIN: 'O sistema precisa de pelo menos um administrador ativo.',
+  TROCA_PENDENTE: 'Este aluno já tem um pedido de troca aguardando o coordenador.',
+  TROCA_JA_DECIDIDA: 'Este pedido já foi decidido.',
   MOTIVO_OBRIGATORIO: 'Informe o motivo (mínimo de 5 caracteres).',
   JUSTIFICATIVA_OBRIGATORIA: 'Registro sem foto exige justificativa.',
   JA_EXISTE_REFEICAO_NESSE_DIA: 'Este aluno já tem refeição registrada nesse dia. Marque como refeição extra, se for o caso.',

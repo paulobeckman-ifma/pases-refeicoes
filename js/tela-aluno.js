@@ -61,12 +61,11 @@ function aoEstado(m) {
         <p>A foto de hoje será usada para reconhecer você nos próximos dias.</p>`, 'aviso'); break;
     case 'confirmar': case 'tipo': {
       $('#dica').textContent = 'Identificado';
-      const op = (t, n, r) => `<div class="opcao ${m.tipoSel === t ? 'sel' : ''}"><span class="tecla">${n}</span> ${r}</div>`;
+
       mostrar(`<div class="fotos uma"><div class="foto">${m.foto ? `<img src="${m.foto}" alt="">` : 'Sem foto de cadastro'}<span>Cadastro</span></div></div>
         <div class="nome">${esc(m.nome)}</div><div class="sub">Matrícula ${esc(m.matricula || '')}<br>${esc(m.curso || '')}</div>
-        <div class="opcoes">${op('refeicao', 1, 'Refeição')}${op('lanche', 2, 'Lanche')}</div>
-        ${m.tipoSel ? (m.confirmar === false ? '<p>Registrando…</p>' : `<p class="grande">Confirme com <span class="tecla">ENTER</span></p>`)
-          : '<p class="grande">Tecle <span class="tecla">1</span> ou <span class="tecla">2</span></p>'}
+        <div class="opcao sel ${m.tipoSel === 'lanche' ? 'lanche' : ''}">${m.tipoSel === 'lanche' ? 'Lanche' : 'Refeição'}</div>
+        ${m.confirmar === false ? '<p>Registrando…</p>' : `<p class="grande">Confirme com <span class="tecla">ENTER</span></p>`}
         ${m.estado === 'confirmar' ? '<p>Não é você? Tecle <span class="tecla">-</span> e digite seu CPF.</p>' : ''}`, 'ok'); break; }
     case 'cpf':
       $('#dica').textContent = 'Digitando CPF';

@@ -3,7 +3,7 @@ import { $, $$, esc, ico, aviso, CFG } from './util.js';
 import { rpc, api, sessao, relogio, traduzir } from './api.js';
 import { montarBalcao } from './kiosk.js';
 
-export const VERSAO = '1.3.0';
+export const VERSAO = '1.4.0';
 const raiz = $('#app');
 let desmontar = null;
 
@@ -13,6 +13,7 @@ const ROTAS = {
   registros:     { titulo: 'Registros', icone: 'lista', perfis: ['admin', 'consulta', 'operador'], carregar: () => import('./pag-registros.js') },
   relatorios:    { titulo: 'Relatórios', icone: 'grafico', perfis: ['admin', 'consulta'], carregar: () => import('./pag-relatorios.js') },
   alunos:        { titulo: 'Alunos', icone: 'usuarios', perfis: ['admin', 'consulta'], carregar: () => import('./pag-alunos.js') },
+  trocas:        { titulo: 'Trocas', icone: 'atualizar', perfis: ['admin', 'consulta'], carregar: () => import('./pag-trocas.js') },
   faces:         { titulo: 'Validar rostos', icone: 'rosto', perfis: ['admin'], carregar: () => import('./pag-faces.js') },
   usuarios:      { titulo: 'Usuários', icone: 'chave', perfis: ['admin'], carregar: () => import('./pag-usuarios.js') },
   configuracoes: { titulo: 'Configurações', icone: 'config', perfis: ['admin', 'consulta'], carregar: () => import('./pag-config.js') },
@@ -25,7 +26,7 @@ const inicial = () => (sessao.perfil === 'operador' ? 'balcao' : 'painel');
 function telaLogin(msg = '') {
   raiz.innerHTML = `<div class="tela-login"><form class="login-cartao" autocomplete="on">
       <img src="assets/logo-ifma.png" alt="IFMA Campus Imperatriz">
-      <h1>PASES Refeições</h1><p>Programa de Alimentação Estudantil</p>
+      <h1>PASES</h1><p>Sistema de Gerenciamento de Refeições</p>
       <label class="campo"><span>Usuário</span><input type="text" name="login" autocomplete="username" required autocapitalize="off"></label>
       <label class="campo"><span>Senha</span><input type="password" name="senha" autocomplete="current-password" required></label>
       <div class="caixa erro-caixa ${msg ? '' : 'oculto'}" data-erro>${esc(msg)}</div>
@@ -54,7 +55,7 @@ function shell(rota) {
   const u = sessao.usuario;
   raiz.innerHTML = `<div class="shell">
     <aside class="lateral" id="lateral">
-      <div class="marca"><img src="assets/simbolo-ifma.png" alt=""><div><b>PASES</b><small>Refeições · Imperatriz</small></div></div>
+      <div class="marca"><img src="assets/simbolo-ifma.png" alt=""><div><b>PASES</b><small>Gerenciamento de Refeições</small></div></div>
       <nav class="nav">${Object.entries(ROTAS).filter(([, r]) => r.perfis.includes(u.perfil) && !(r.semMenu || []).includes(u.perfil)).map(([id, r]) =>
         `<a href="#/${id}" class="${id === rota ? 'ativo' : ''}" data-rota="${id}">${ico(r.icone)}<span>${r.titulo}</span></a>`).join('')}</nav>
       <div class="usuario-box"><b>${esc(u.nome)}</b><span class="mudo">${esc(u.login)} · ${esc(u.perfil)}</span><br>
@@ -67,6 +68,7 @@ function shell(rota) {
     api('faces_listar', { p_pendentes: true }).then((l) => {
       const a = $('[data-rota=faces]'); if (a) { a.querySelectorAll('.contagem').forEach((x) => x.remove()); if (l.length) a.insertAdjacentHTML('beforeend', `<span class="contagem">${l.length}</span>`); }
     }).catch(() => {});
+    import('./pag-trocas.js').then((m) => m.atualizarContador()).catch(() => {});
   }
   return $('#conteudo');
 }

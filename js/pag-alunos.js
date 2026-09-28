@@ -4,6 +4,7 @@ import { api, gas, gasConfigurado, foto, fotos, guardarFotoLocal } from './api.j
 import { abrirCamera, pararCamera, capturar, reduzirImagem, preferencias } from './camera.js';
 import { carregarFace, descritorDeImagem, imagemDeDataUrl } from './face.js';
 import * as D from './dados.js';
+import { TIPO } from './util.js';
 
 export async function render(el, { cabecalho, perfil }) {
   const admin = perfil === 'admin';
@@ -15,18 +16,20 @@ export async function render(el, { cabecalho, perfil }) {
       <button class="btn" id="a-csv">${ico('baixar')} CSV</button>` : `<button class="btn" id="a-csv">${ico('baixar')} CSV</button>`) + `
     <div class="barra-filtros">
       <label class="campo" style="min-width:260px"><span>Buscar</span><input type="search" id="a-busca" placeholder="Nome, matrícula ou CPF"></label>
+      <label class="campo"><span>Modalidade</span><select id="a-mod"><option value="">Refeição e lanche</option><option value="refeicao">Refeição (almoço)</option><option value="lanche">Lanche</option></select></label>
       <label class="campo"><span>Mostrar</span><select id="a-filtro">
         <option value="ativos">Ativos</option><option value="">Todos</option><option value="inativos">Inativos</option><option value="cancelados">Cadastro cancelado</option>
         <option value="semcpf">Sem CPF</option><option value="semref">Sem referência facial</option><option value="semsuap">Sem foto do SUAP</option><option value="pend">Com rosto a validar</option></select></label>
     </div>
     <div id="a-resumo" class="pequeno mudo" style="margin-bottom:8px"></div>
-    <div class="tabela-wrap"><table class="tabela"><thead><tr><th>Aluno</th><th>Curso</th><th>CPF</th><th>Situação</th><th>Reconhecimento</th><th class="num">Refeições</th><th>Última</th></tr></thead>
+    <div class="tabela-wrap"><table class="tabela"><thead><tr><th>Aluno</th><th>Modalidade</th><th>Curso</th><th>CPF</th><th>Situação</th><th>Reconhecimento</th><th class="num">Refeições</th><th>Última</th></tr></thead>
     <tbody id="a-corpo"></tbody></table></div>`;
 
   function filtrar() {
-    const q = normalizar($('#a-busca').value.trim()), f = $('#a-filtro').value, qd = soDigitos(q);
+    const q = normalizar($('#a-busca').value.trim()), f = $('#a-filtro').value, qd = soDigitos(q), md = $('#a-mod').value;
     const t = lista.filter((a) => {
       if (q && !(normalizar(`${a.nome} ${a.matricula}`).includes(q) || (qd.length >= 3 && (a.cpf || '').includes(qd)))) return false;
+      if (md && (a.modalidade || 'refeicao') !== md) return false;
       if (f === 'ativos' && !a.ativo) return false; if (f === 'inativos' && a.ativo) return false;
       if (f === 'cancelados' && !a.cancelado_em) return false;
       if (f === 'semcpf' && a.cpf) return false; if (f === 'semref' && a.faces) return false;
@@ -34,15 +37,16 @@ export async function render(el, { cabecalho, perfil }) {
       return true;
     });
     const at = lista.filter((a) => a.ativo);
-    $('#a-resumo').innerHTML = `${t.length} exibido(s) · ${at.length} ativos · ${lista.filter((a) => a.cancelado_em).length} cancelado(s) · ${at.filter((a) => !a.cpf).length} ativos sem CPF · ${at.filter((a) => !a.faces).length} ativos sem referência facial`;
+    $('#a-resumo').innerHTML = `${t.length} exibido(s) · ${at.length} ativos (${at.filter((a) => a.modalidade !== 'lanche').length} refeição, ${at.filter((a) => a.modalidade === 'lanche').length} lanche) · ${lista.filter((a) => a.cancelado_em).length} cancelado(s) · ${at.filter((a) => !a.cpf).length} ativos sem CPF · ${at.filter((a) => !a.faces).length} ativos sem referência facial`;
     $('#a-corpo').innerHTML = t.map((a) => {
       const fc = a.faces || {};
       return `<tr class="clicavel" data-id="${a.id}"><td>${esc(a.nome)}${a.cancelado_em ? ' <span class="selo vermelho-suave">cancelado</span>' : a.ativo ? '' : ' <span class="selo">inativo</span>'}<br><small class="mudo">${esc(a.matricula || '')}</small></td>
+        <td><span class="selo ${a.modalidade === 'lanche' ? 'azul' : 'verde'}">${TIPO[a.modalidade || 'refeicao']}</span></td>
         <td class="pequeno">${esc(a.curso || '')}</td><td class="num pequeno">${a.cpf ? esc(admin ? fmtCpf(a.cpf) : a.cpf) : '<span class="selo vermelho-suave">sem CPF</span>'}</td>
         <td class="pequeno">${esc(a.situacao_suap || '')}</td>
         <td>${fc.suap ? '<span class="selo verde">SUAP</span> ' : ''}${fc.manual ? '<span class="selo verde">cadastro</span> ' : ''}${fc.webcam ? `<span class="selo azul">balcão ×${fc.webcam}</span> ` : ''}${a.faces_pendentes ? '<span class="selo ambar">validar</span>' : ''}${!a.faces ? '<span class="selo">sem referência</span>' : ''}</td>
         <td class="num">${a.total}</td><td class="pequeno">${a.ultima ? fmtData(a.ultima) : '<span class="mudo">nunca</span>'}</td></tr>`;
-    }).join('') || '<tr><td colspan="7" class="vazio">Nenhum aluno encontrado.</td></tr>';
+    }).join('') || '<tr><td colspan="8" class="vazio">Nenhum aluno encontrado.</td></tr>';
   }
   async function recarregar() { lista = await D.alunos(true); filtrar(); }
 
@@ -65,6 +69,8 @@ export async function render(el, { cabecalho, perfil }) {
         <label class="campo"><span>Curso</span><input type="text" name="curso" value="${esc(a.curso || '')}" list="dl-cursos" ${admin ? '' : 'disabled'}>
           <datalist id="dl-cursos">${[...new Set(lista.map((x) => x.curso).filter(Boolean))].sort().map((c) => `<option value="${esc(c)}">`).join('')}</datalist></label>
         <label class="campo"><span>Nível</span><input type="text" name="nivel" value="${esc(a.nivel || '')}" list="dl-niveis" ${admin ? '' : 'disabled'}><datalist id="dl-niveis"><option value="Técnico"><option value="Graduação"></datalist></label>
+        <label class="campo"><span>Modalidade no PASES</span><select name="modalidade" ${admin ? '' : 'disabled'}>
+          <option value="refeicao" ${a.modalidade !== 'lanche' ? 'selected' : ''}>Refeição (almoço)</option><option value="lanche" ${a.modalidade === 'lanche' ? 'selected' : ''}>Lanche</option></select></label>
         <label class="campo"><span>Situação no SUAP</span><input type="text" name="situacao_suap" value="${esc(a.situacao_suap || '')}" ${admin ? '' : 'disabled'}></label>
         <label class="campo"><span>Link da foto no SUAP</span><input type="text" name="foto_suap_url" value="${esc(a.foto_suap_url || '')}" ${admin ? '' : 'disabled'}></label>
         <label class="campo" style="grid-column:1/-1"><span>Observação</span><textarea name="observacao" ${admin ? '' : 'disabled'}>${esc(a.observacao || '')}</textarea></label>
@@ -99,7 +105,7 @@ export async function render(el, { cabecalho, perfil }) {
         const cpf = soDigitos(f.cpf.value);
         if (cpf && !cpfValido(cpf)) { aviso('CPF inválido.', 'erro'); return false; }
         const dados = { id: a.id, nome: f.nome.value, cpf, matricula: f.matricula.value, curso: f.curso.value, nivel: f.nivel.value,
-          situacao_suap: f.situacao_suap.value, foto_suap_url: f.foto_suap_url.value, observacao: f.observacao.value, ativo: f.ativo.checked };
+          situacao_suap: f.situacao_suap.value, foto_suap_url: f.foto_suap_url.value, modalidade: f.modalidade.value, observacao: f.observacao.value, ativo: f.ativo.checked };
         try { await api('aluno_salvar', { p_dados: dados }); aviso('Aluno salvo.', 'ok'); fechar(); recarregar(); } catch (e) { aviso(e.message, 'erro'); }
         return false;
       } }] : []
@@ -184,7 +190,7 @@ export async function render(el, { cabecalho, perfil }) {
     modal({
       titulo: 'Importar alunos (planilha CSV)', largo: true,
       corpo: `<div class="caixa info pequeno">Use um arquivo CSV (salve a planilha como "CSV separado por ponto e vírgula"). Colunas reconhecidas:
-          <b>matricula, nome, cpf, curso, nivel, situacao_suap, ativo, foto_suap_url</b>. Alunos já cadastrados são localizados pela matrícula (ou CPF) e atualizados; os demais são incluídos.</div>
+          <b>matricula, nome, cpf, curso, nivel, situacao_suap, ativo, foto_suap_url, modalidade</b> (refeicao ou lanche). Alunos já cadastrados são localizados pela matrícula (ou CPF) e atualizados; os demais são incluídos.</div>
         <input type="file" accept=".csv,text/csv" data-arq><div data-prev></div>`,
       aoAbrir: (el, fechar) => {
         $('[data-arq]', el).onchange = async (e) => {
@@ -193,7 +199,7 @@ export async function render(el, { cabecalho, perfil }) {
           const itens = linhas.map((l) => ({
             matricula: l.matricula || l.matricula_suap || '', nome: l.nome || l.nome_completo || '', cpf: soDigitos(l.cpf || ''),
             curso: l.curso || l.descricao_do_curso || '', nivel: l.nivel || l.nivel_de_ensino || '', situacao_suap: l.situacao_suap || l.situacao || '',
-            foto_suap_url: l.foto_suap_url || l.url_foto || '',
+            foto_suap_url: l.foto_suap_url || l.url_foto || '', modalidade: l.modalidade || '',
             ativo: l.ativo === undefined || l.ativo === '' ? undefined : /^(s|sim|true|1|ativo)$/i.test(l.ativo)
           })).filter((x) => x.nome);
           const semCpf = itens.filter((x) => !x.cpf).length, cpfRuim = itens.filter((x) => x.cpf && !cpfValido(x.cpf.padStart(11, '0'))).length;
@@ -275,7 +281,7 @@ export async function render(el, { cabecalho, perfil }) {
 
   // ---------------------------------------------------------------- eventos
   $('#a-busca').oninput = debounce(filtrar, 200);
-  $('#a-filtro').onchange = filtrar;
+  $('#a-filtro').onchange = filtrar; $('#a-mod').onchange = filtrar;
   $('#a-corpo').onclick = (e) => { const tr = e.target.closest('tr[data-id]'); if (tr) ficha(lista.find((a) => a.id === tr.dataset.id)); };
   $('#a-csv').onclick = () => baixarCsv('pases_alunos', ['nome', 'matricula', 'cpf', 'curso', 'nivel', 'situacao_suap', 'ativo', 'cancelado_em', 'motivo_cancelamento', 'refeicoes', 'ultima', 'referencia_facial'],
     lista.map((a) => [a.nome, a.matricula, a.cpf, a.curso, a.nivel, a.situacao_suap, a.ativo ? 'sim' : 'não', a.cancelado_em ? fmtData(a.cancelado_em.slice(0, 10)) : '', a.cancelado_motivo || '', a.total, fmtData(a.ultima), a.faces ? 'sim' : 'não']));

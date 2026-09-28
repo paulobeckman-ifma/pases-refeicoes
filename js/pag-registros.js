@@ -141,7 +141,7 @@ export async function render(el, { cabecalho, perfil }) {
     modal({
       titulo: 'Registro manual', corpo: `<div class="caixa aviso-caixa pequeno">Use quando o balcão não pôde ser usado. O registro fica marcado como <b>manual e sem foto</b> e exige justificativa.</div>
         ${seletorAluno()}
-        <label class="campo"><span>Tipo</span><select data-tp><option value="refeicao">Refeição</option><option value="lanche">Lanche</option></select></label>
+        <label class="campo"><span>Tipo</span><select data-tp><option value="">Conforme o cadastro do aluno</option><option value="refeicao">Refeição</option><option value="lanche">Lanche</option></select></label>
         <label class="campo"><span>Data e hora</span><input type="datetime-local" data-dh value="${agora}"></label>
         <label class="campo"><span>Justificativa</span><textarea data-j placeholder="Ex.: notebook do balcão sem energia; lista em papel assinada"></textarea></label>
         <label class="check"><input type="checkbox" data-x> Registro extra (o aluno já tem refeição ou lanche nesse dia)</label>`,

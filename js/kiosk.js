@@ -34,6 +34,7 @@ export function montarBalcao(raiz, { aoSair }) {
       <span class="pilula" id="k-rede"></span>
       <span class="pilula oculto" id="k-face"></span>
       <span class="espaco"></span>
+      <button class="btn" id="k-troca">${ico('atualizar')} Solicitar troca</button>
       <button class="btn" id="k-registros">${ico('lista')} Registros</button>
       <button class="btn" id="k-camera">${ico('camera')} Câmera</button>
       <button class="btn" id="k-tela">${ico('monitor')} Tela do aluno</button>
@@ -57,9 +58,7 @@ export function montarBalcao(raiz, { aoSair }) {
         <div class="caixa-escura">
           <div class="caixa erro-caixa oculto" id="k-modo-semfoto" style="margin-bottom:10px"></div>
           <div class="mensagem-balcao" id="k-msg"></div>
-          <div class="tipos oculto" id="k-tipos">
-            <button data-tipo="refeicao"><b>1</b> Refeição</button><button data-tipo="lanche"><b>2</b> Lanche</button>
-          </div>
+          <div class="modalidade-balcao oculto" id="k-tipos"></div>
           <div class="cpf-visor" id="k-cpf" aria-live="polite"></div>
           <div class="teclado" id="k-teclado">
             ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button data-d="${n}">${n}</button>`).join('')}
@@ -188,11 +187,11 @@ export function montarBalcao(raiz, { aoSair }) {
     if (S.parado) return;
     const t0 = performance.now();
     try {
-      if (S.faceOk && S.camOk && S.config.reconhecimento?.ativo && ['aguardando', 'naoreconhecido', 'cpf', 'tipo'].includes(S.estado) && !document.hidden && cameraAtiva(video)) {
+      if (S.faceOk && S.camOk && S.config.reconhecimento?.ativo && ['aguardando', 'naoreconhecido', 'cpf'].includes(S.estado) && !document.hidden && cameraAtiva(video)) {
         const { rosto, quantidade, foraMoldura } = await detectarAoVivo(video);
         S.foraMoldura = !!foraMoldura;
         if (rosto) S.ultimoRosto = { desc: Array.from(rosto.descriptor, (v) => Math.round(v * 1e6) / 1e6), largura: rosto.detection.box.width, quantidade, t: Date.now() };
-        if (S.estado === 'cpf' || S.estado === 'tipo') desenharRosto(rosto && rosto.detection.box.width >= (video.videoWidth || 1) * 0.11 ? rosto : null);
+        if (S.estado === 'cpf') desenharRosto(rosto && rosto.detection.box.width >= (video.videoWidth || 1) * 0.11 ? rosto : null);
         else processarRosto(rosto);
       } else if (!['confirmar'].includes(S.estado)) desenharRosto(null);
     } catch (e) { console.warn(e); }
@@ -249,13 +248,14 @@ export function montarBalcao(raiz, { aoSair }) {
   function mensagem(t, sub = '') { $('#k-msg', raiz).innerHTML = `${esc(t)}${sub ? `<small>${esc(sub)}</small>` : ''}`; }
   function mostrarTipos(mostrar) {
     const el = $('#k-tipos', raiz); if (!el) return;
-    el.classList.toggle('oculto', !mostrar);
-    el.querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.tipo === S.tipoSel));
+    el.classList.toggle('oculto', !mostrar || !S.tipoSel);
+    el.className = `modalidade-balcao ${S.tipoSel === 'lanche' ? 'lanche' : 'refeicao'} ${mostrar && S.tipoSel ? '' : 'oculto'}`;
+    el.innerHTML = S.tipoSel ? `<small>Beneficiário de</small>${TIPO[S.tipoSel]}` : '';
   }
   function definirEstado(est, extra = {}) {
     S.estado = est; clearTimeout(S.confirmarTimer);
-    if (!['confirmar', 'tipo'].includes(est)) S.tipoSel = null;
-    mostrarTipos(['confirmar', 'tipo'].includes(est));
+    if (est !== 'confirmar') S.tipoSel = null;
+    mostrarTipos(est === 'confirmar');
     if (est === 'aguardando') {
       S.cpf = ''; S.candidato = null; desenharCpf();
       mensagem(S.faceOk && S.camOk ? 'Encaixe o rosto na moldura ou digite o CPF' : 'Digite o CPF e pressione ENTER',
@@ -264,12 +264,8 @@ export function montarBalcao(raiz, { aoSair }) {
       mensagem('Rosto não reconhecido', 'Peça ao aluno para digitar o CPF. A foto de hoje passará a ser a referência dele.');
     } else if (est === 'confirmar') {
       const a = extra.aluno;
-      mensagem(`${a.n}`, `${a.m || ''} · ${a.c || ''} · semelhança ${semelhanca(extra.distancia)}% · tecle 1 (Refeição) ou 2 (Lanche) e ENTER · ESC se não for ele(a)`);
+      mensagem(`${a.n}`, `${a.m || ''} · ${a.c || ''} · semelhança ${semelhanca(extra.distancia)}% · ENTER confirma · ESC se não for ele(a)`);
       S.confirmarTimer = setTimeout(() => { if (S.estado === 'confirmar') { S.ignorar.set(a.id, Date.now() + 8000); definirEstado('aguardando'); } }, 20000);
-    } else if (est === 'tipo') {
-      const a = extra.aluno;
-      mensagem(`${a.n}`, `${a.m || ''} · ${a.c || ''} · tecle 1 (Refeição) ou 2 (Lanche) e ENTER · ESC cancela`);
-      S.confirmarTimer = setTimeout(() => { if (S.estado === 'tipo') definirEstado('aguardando'); }, 20000);
     } else if (est === 'cpf') {
       mensagem('Digitando CPF…', 'ENTER confirma · ⌫ apaga · ESC ou "-" cancela');
     } else if (est === 'processando') mensagem('Registrando…');
@@ -293,26 +289,19 @@ export function montarBalcao(raiz, { aoSair }) {
     const fotoCad = await fotoRapida(aluno.fb || aluno.fs);
     if (S.estado !== 'aguardando' && S.estado !== 'naoreconhecido') return;
     S.fotoCand = fotoCad;
+    S.tipoSel = modalidadeDe(aluno);
+    if (S.config.reconhecimento.confirmar === false) return registrar(aluno, 'facial', distancia, S.tipoSel);
     definirEstado('confirmar', { aluno, distancia, tela: telaEscolha(aluno, fotoCad, distancia) });
   }
+  const modalidadeDe = (aluno) => (aluno.md === 'lanche' ? 'lanche' : 'refeicao');
   function telaEscolha(aluno, foto, distancia = null) {
     return { nome: aluno.n, matricula: aluno.m, curso: aluno.c, foto, semelhanca: distancia != null ? semelhanca(distancia) : null,
       tipoSel: S.tipoSel, confirmar: S.config.reconhecimento.confirmar !== false };
   }
-  // 1 = Refeição, 2 = Lanche. Com "Aluno confirma com ENTER" desligado, a escolha já registra.
-  function escolherTipo(t) {
-    if (!['confirmar', 'tipo'].includes(S.estado) || !S.candidato) return;
-    S.tipoSel = t; mostrarTipos(true);
-    clearTimeout(S.confirmarTimer);
-    const est = S.estado;
-    S.confirmarTimer = setTimeout(() => { if (S.estado === est) definirEstado('aguardando'); }, 20000);
-    tela({ tipo: 'estado', estado: S.estado, ...telaEscolha(S.candidato.aluno, S.fotoCand, S.candidato.distancia) });
-    if (S.config.reconhecimento.confirmar === false) confirmarEscolha();
-  }
+  // o tipo (refeição ou lanche) vem do cadastro do aluno; a troca é pedida ao coordenador
   function confirmarEscolha() {
     const c = S.candidato; if (!c) return;
-    if (!S.tipoSel) { mensagem(c.aluno.n, 'Escolha 1 (Refeição) ou 2 (Lanche) antes de confirmar.'); return; }
-    registrar(c.aluno, c.metodo, c.distancia, S.tipoSel);
+    registrar(c.aluno, c.metodo, c.distancia, modalidadeDe(c.aluno));
   }
 
   // foto de cadastro: usa o cache local; se precisar buscar no Drive, espera no máximo 1,5 s
@@ -324,7 +313,7 @@ export function montarBalcao(raiz, { aoSair }) {
   // ---------------------------------------------------------------- teclado
   function digito(d) {
     if (S.estado === 'processando') return;
-    if (S.estado === 'confirmar' || S.estado === 'tipo') { if (d === '1') escolherTipo('refeicao'); else if (d === '2') escolherTipo('lanche'); return; }
+    if (S.estado === 'confirmar') return;
     if (S.estado === 'resultado') fecharResultado();
     if (S.cpf.length >= 11) return;
     if (S.estado !== 'cpf') definirEstado('cpf');
@@ -338,7 +327,7 @@ export function montarBalcao(raiz, { aoSair }) {
   }
   async function enter() {
     if (S.estado === 'resultado') return fecharResultado();
-    if ((S.estado === 'confirmar' || S.estado === 'tipo') && S.candidato) return confirmarEscolha();
+    if (S.estado === 'confirmar' && S.candidato) return confirmarEscolha();
     if (S.estado !== 'cpf') return;
     const cpf = S.cpf;
     if (cpf.length < 11) { mensagem('CPF incompleto', 'Digite os 11 números do CPF.'); return; }
@@ -364,8 +353,8 @@ export function montarBalcao(raiz, { aoSair }) {
     if (!aluno.at) return resultado('inativo', { aluno });
     S.cpf = ''; desenharCpf();
     S.candidato = { aluno, distancia: null, metodo: 'cpf' };
-    S.fotoCand = await fotoRapida(aluno.fb || aluno.fs);
-    definirEstado('tipo', { aluno, tela: telaEscolha(aluno, S.fotoCand) });
+    S.estado = 'identificado';   // libera o registrar (o estado 'processando' bloqueia chamadas repetidas)
+    registrar(aluno, 'cpf', null, modalidadeDe(aluno));
   }
   function cancelar() {
     if (S.estado === 'resultado') return fecharResultado();
@@ -631,11 +620,47 @@ export function montarBalcao(raiz, { aoSair }) {
     b.blur();
   });
   $('#k-tela', raiz).onclick = abrirTelaAluno;
-  $('#k-tipos', raiz).addEventListener('click', (e) => {
-    const b = e.target.closest('[data-tipo]'); if (!b) return; b.blur();
-    // clique do atendente: escolhe e confirma de uma vez
-    escolherTipo(b.dataset.tipo); if (S.config.reconhecimento.confirmar !== false) confirmarEscolha();
-  });
+  $('#k-troca', raiz).onclick = solicitarTroca;
+  // pedido do aluno para trocar refeição por lanche (ou o contrário): vai para o coordenador decidir
+  function solicitarTroca() {
+    let sel = S.candidato?.aluno || null;
+    const busca = (q) => {
+      q = q.trim().toLowerCase(); if (q.length < 3) return [];
+      const n = q.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return [...S.alunos.values()].filter((a) => (a.n || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(n) || (a.m || '').toLowerCase().includes(q)).slice(0, 8);
+    };
+    const resumo = (a) => {
+      const de = modalidadeDe(a), para = de === 'lanche' ? 'refeicao' : 'lanche';
+      return `<div class="caixa" style="margin:4px 0 0"><b>${esc(a.n)}</b><br><span class="mudo">${esc(a.m || '')} · ${esc(a.c || '')}</span>
+        <p style="margin:8px 0 0">Hoje: <span class="selo ${de === 'lanche' ? 'azul' : 'verde'}">${TIPO[de]}</span> → pedido: <span class="selo ${para === 'lanche' ? 'azul' : 'verde'}">${TIPO[para]}</span></p></div>`;
+    };
+    modal({
+      titulo: 'Solicitar troca de modalidade',
+      corpo: `<p class="mudo" style="margin:0">O pedido vai para o coordenador do programa. Até ser aprovado, o aluno continua registrando na modalidade atual.</p>
+        <label class="campo"><span>Aluno (nome ou matrícula)</span><input type="text" data-q autocomplete="off" value="${sel ? esc(sel.n) : ''}"></label>
+        <div data-res class="lista-busca"></div><div data-sel>${sel ? resumo(sel) : ''}</div>
+        <label class="campo"><span>Motivo informado pelo aluno</span><textarea data-m rows="3" placeholder="Ex.: passou a ter aula à tarde e precisa almoçar no campus"></textarea></label>`,
+      aoAbrir: (el) => {
+        const q = $('[data-q]', el), res = $('[data-res]', el);
+        q.oninput = () => {
+          res.innerHTML = busca(q.value).map((a) => `<button type="button" class="item-busca" data-id="${a.id}"><b>${esc(a.n)}</b> <span class="mudo">${esc(a.m || '')} · ${TIPO[modalidadeDe(a)]}</span></button>`).join('');
+        };
+        res.onclick = (e) => {
+          const b = e.target.closest('[data-id]'); if (!b) return;
+          sel = S.alunos.get(b.dataset.id); res.innerHTML = ''; q.value = sel.n; $('[data-sel]', el).innerHTML = resumo(sel); $('[data-m]', el).focus();
+        };
+      },
+      botoes: [{ texto: 'Cancelar' }, { texto: 'Enviar ao coordenador', classe: 'primario', acao: async (fechar, el) => {
+        if (!sel) { aviso('Escolha o aluno na lista.', 'erro'); return false; }
+        const motivo = $('[data-m]', el).value.trim();
+        if (motivo.length < 5) { aviso('Informe o motivo do pedido.', 'erro'); return false; }
+        try {
+          const r = await api('troca_solicitar', { p_aluno_id: sel.id, p_motivo: motivo });
+          aviso(`Pedido enviado: ${TIPO[r.de]} → ${TIPO[r.para]}. Aguarda o coordenador.`, 'ok');
+        } catch (e) { aviso(e.message, 'erro'); return false; }
+      } }]
+    });
+  }
   $('#k-registros', raiz).onclick = () => { location.hash = '#/registros'; };
   $('#k-camera', raiz).onclick = escolherCamera; $('#k-camera2', raiz).onclick = escolherCamera;
   async function escolherCamera() {
