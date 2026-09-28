@@ -258,3 +258,12 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: 14px; }
   .so-impressao { display: block !important; }
 }
 .so-impressao { display: none; }
+
+/* v1.4: modalidade do aluno no balcão e pedido de troca */
+.modalidade-balcao { margin-top: 10px; padding: 12px 14px; border-radius: 12px; font-size: 24px; font-weight: 800; text-align: center; border: 2px solid #b7f0c5; background: var(--verde); color: #fff; }
+.modalidade-balcao.lanche { background: #3b7dd8; border-color: #c4dcff; }
+.modalidade-balcao small { display: block; font-size: 12px; font-weight: 600; opacity: .85; text-transform: uppercase; letter-spacing: .5px; }
+.lista-busca { display: grid; gap: 4px; margin: 4px 0; }
+.item-busca { text-align: left; padding: 8px 10px; border: 1px solid var(--linha, #dfe6e1); border-radius: 8px; background: #fff; cursor: pointer; font: inherit; }
+.item-busca:hover { background: #eef6f0; }
+.troca-seta { font-weight: 700; color: var(--tinta-2, #55625b); }
