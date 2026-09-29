@@ -267,3 +267,10 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: 14px; }
 .item-busca { text-align: left; padding: 8px 10px; border: 1px solid var(--linha, #dfe6e1); border-radius: 8px; background: #fff; cursor: pointer; font: inherit; }
 .item-busca:hover { background: #eef6f0; }
 .troca-seta { font-weight: 700; color: var(--tinta-2, #55625b); }
+/* v1.5: indicador de conexão clicável no balcão */
+button.pilula.clicavel { border: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 650; }
+button.pilula.clicavel:hover { filter: brightness(1.2); }
+.pilula.clicavel svg { width: 14px; height: 14px; opacity: .85; }
+.pilula.verificando svg { animation: gira .8s linear infinite; }
+@keyframes gira { to { transform: rotate(360deg); } }
+.tabela td.sel, .tabela th.sel { width: 28px; text-align: center; }
