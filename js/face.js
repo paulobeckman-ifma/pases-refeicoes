@@ -35,7 +35,9 @@ const maior = (lista) => lista.reduce((a, b) => (!a || b.detection.box.area > a.
 /** Detecção rápida em vídeo ao vivo. Retorna o maior rosto com descritor, ou null. */
 export async function detectarAoVivo(video) {
   const fa = await carregarFace();
-  const r = await fa.detectAllFaces(video, new fa.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+  // com placa de vídeo usa entrada maior (caixa do rosto mais precisa = descritor melhor); na CPU fica leve
+  const tam = fa.tf.getBackend() === 'webgl' ? 416 : 320;
+  const r = await fa.detectAllFaces(video, new fa.TinyFaceDetectorOptions({ inputSize: tam, scoreThreshold: 0.45 }))
     .withFaceLandmarks().withFaceDescriptors();
   // Fila atrás do aluno: só vale o rosto com o centro dentro da moldura oval; entre esses, o maior e mais centralizado.
   const vw = video.videoWidth || 1, vh = video.videoHeight || 1;
@@ -57,6 +59,40 @@ export async function descritorDeImagem(fonte, { minimoLargura = 60 } = {}) {
   const f = maior(r);
   if (!f || f.detection.box.width < minimoLargura) return null;
   return { descritor: Array.from(f.descriptor, (v) => Math.round(v * 1e6) / 1e6), pontuacao: f.detection.score, largura: f.detection.box.width, quantidade: r.length };
+}
+
+/**
+ * Várias referências a partir de uma única foto (ex.: foto do SUAP, antiga ou pequena):
+ * original, espelhada e com correção de luz/contraste. Guardar mais de um descritor por aluno
+ * (e comparar com o mais próximo) é a técnica padrão para compensar diferença de câmera, pose e iluminação.
+ */
+export async function descritoresReferencia(img, { max = 3 } = {}) {
+  const fa = await carregarFace();
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const k = w < 480 ? 480 / w : 1;                                    // fotos pequenas: amplia antes de detectar
+  const base = document.createElement('canvas'); base.width = Math.round(w * k); base.height = Math.round(h * k);
+  const g = base.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(img, 0, 0, base.width, base.height);
+  const variante = (fn) => { const c = document.createElement('canvas'); c.width = base.width; c.height = base.height; fn(c.getContext('2d'), c); return c; };
+  const espelho = variante((x, c) => { x.translate(c.width, 0); x.scale(-1, 1); x.drawImage(base, 0, 0); });
+  const luz = variante((x) => { x.filter = 'brightness(1.12) contrast(1.18) saturate(0.9)'; x.drawImage(base, 0, 0); });
+  const detectar = async (c) => {
+    let r = await fa.detectAllFaces(c, new fa.SsdMobilenetv1Options({ minConfidence: 0.35 })).withFaceLandmarks().withFaceDescriptors();
+    if (!r.length) r = await fa.detectAllFaces(c, new fa.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.35 })).withFaceLandmarks().withFaceDescriptors();
+    const f = maior(r);
+    return f && f.detection.box.width >= 40 ? Array.from(f.descriptor, (v) => Math.round(v * 1e6) / 1e6) : null;
+  };
+  const out = [];
+  for (const c of [base, espelho, luz]) { const d = await detectar(c); if (d) out.push(d); if (out.length >= max) break; }
+  return out;
+}
+
+/** Média de vários descritores do mesmo rosto (quadros seguidos do vídeo): reduz o ruído de cada quadro. */
+export function descritorMedio(lista) {
+  if (!lista.length) return null;
+  const m = new Float32Array(128);
+  for (const d of lista) for (let i = 0; i < 128; i++) m[i] += d[i];
+  for (let i = 0; i < 128; i++) m[i] /= lista.length;
+  return m;
 }
 
 export function imagemDeDataUrl(url) {

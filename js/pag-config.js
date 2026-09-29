@@ -33,11 +33,11 @@ export async function render(el, { cabecalho, perfil }) {
       <div class="grade" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
         <label class="check"><input type="checkbox" id="c-rec" ${cfg.reconhecimento?.ativo ? 'checked' : ''}> Usar reconhecimento facial no balcão</label>
         <label class="check"><input type="checkbox" id="c-conf" ${cfg.reconhecimento?.confirmar !== false ? 'checked' : ''}> Aluno confirma com ENTER (recomendado)</label>
-        <label class="campo"><span>Rigor: <b id="c-lim-v">${Number(cfg.reconhecimento?.limiar ?? 0.5).toFixed(2)}</b> (menor = mais rigoroso)</span>
-          <input type="range" id="c-lim" min="0.35" max="0.60" step="0.01" value="${cfg.reconhecimento?.limiar ?? 0.5}"></label>
+        <label class="campo"><span>Rigor: <b id="c-lim-v">${Number(cfg.reconhecimento?.limiar ?? 0.55).toFixed(2)}</b> (menor = mais rigoroso)</span>
+          <input type="range" id="c-lim" min="0.40" max="0.65" step="0.01" value="${cfg.reconhecimento?.limiar ?? 0.55}"></label>
         <label class="campo"><span>Quadros seguidos para confirmar</span><input type="number" id="c-qua" min="2" max="8" value="${cfg.reconhecimento?.quadros ?? 3}"></label>
       </div>
-      <p class="mudo pequeno">Padrão recomendado: rigor 0,50 e 3 quadros. Se alunos forem confundidos entre si, diminua o rigor para 0,45. Se muitos não forem reconhecidos, aumente para 0,55.</p>
+      <p class="mudo pequeno">Padrão recomendado: rigor 0,55 e 3 quadros. O balcão compara a média de vários quadros e só aceita quando o aluno está claramente mais próximo do que o 2º mais parecido. Se alunos forem confundidos entre si, diminua para 0,50. Se muitos não forem reconhecidos, aumente para 0,58 e gere de novo as referências do SUAP (Alunos &gt; Gerar referências faciais &gt; Recalcular todas).</p>
       <button class="btn primario" id="c-salvar-rec">Salvar reconhecimento</button></div>
 
     <div class="cartao"><h2>${ico('grafico')} Semestres (para os relatórios)</h2>

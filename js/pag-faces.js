@@ -6,7 +6,7 @@ import * as D from './dados.js';
 export async function render(el, { cabecalho }) {
   let lista = await api('faces_listar', { p_pendentes: true });
 
-  el.innerHTML = cabecalho('Validar rostos', 'Quando o rosto não é reconhecido, o aluno digita o CPF e a foto do balcão vira referência. Confira se é a mesma pessoa da foto do SUAP.',
+  el.innerHTML = cabecalho('Validar rostos', 'Fotos do balcão (aluno que digitou o CPF) e novas fotos enviadas pelo operador na ficha do aluno. Confira se é a mesma pessoa da foto do SUAP.',
     `<button class="btn" id="f-todos">${ico('check')} Aprovar todos os exibidos</button>`) + `
     <div class="caixa info" style="margin-bottom:14px">As referências já funcionam enquanto aguardam validação. Rejeitar apaga a referência e impede que outra pessoa seja reconhecida com o nome deste aluno.</div>
     <div id="f-lista" class="cards-faces"></div>`;
@@ -22,7 +22,7 @@ export async function render(el, { cabecalho }) {
     const pos = lista.findIndex((x) => x.id === f.id) + 1;
     const m = modal({
       titulo: `${f.nome} · ${pos} de ${lista.length}`, largo: true,
-      corpo: `<div class="fotos-par">${caixa(comp, rot)}${caixa(f.foto_id, 'Balcão')}</div>
+      corpo: `<div class="fotos-par">${caixa(comp, rot)}${caixa(f.foto_id, f.origem === 'manual' ? 'Nova foto (operador)' : 'Balcão')}</div>
         <p class="mudo" style="margin:10px 0 0">${esc(f.matricula || '')} · ${esc(f.curso || '')} · capturada em ${fmtDataHora(f.criado_em)} · teclas: <b>S</b> mesma pessoa, <b>N</b> não é a mesma, <b>→</b> próxima</p>`,
       botoes: [
         { texto: 'Próxima →', acao: (fechar) => { fechar(); proxima(f.id, false); return false; } },
@@ -50,7 +50,7 @@ export async function render(el, { cabecalho }) {
     if (!lista.length) { box.innerHTML = '<div class="vazio" style="grid-column:1/-1">Nenhuma foto aguardando validação.</div>'; return; }
     box.innerHTML = lista.map((f) => `<div class="cartao" data-id="${f.id}" style="margin:0">
         <div class="fotos-par clicavel" data-abrir title="Clique para ampliar"><div class="foto-box" data-img="${esc(f.foto_suap_id || '')}">${f.foto_suap_id ? 'Carregando…' : 'Sem foto do SUAP'}<span class="rotulo">SUAP</span></div>
-          <div class="foto-box" data-img="${esc(f.foto_id || '')}">${f.foto_id ? 'Carregando…' : 'Foto não enviada'}<span class="rotulo">Balcão</span></div></div>
+          <div class="foto-box" data-img="${esc(f.foto_id || '')}">${f.foto_id ? 'Carregando…' : 'Foto não enviada'}<span class="rotulo">${f.origem === 'manual' ? 'Nova foto (operador)' : 'Balcão'}</span></div></div>
         <div style="margin:10px 0"><b>${esc(f.nome)}</b><br><small class="mudo">${esc(f.matricula || '')} · ${esc(f.curso || '')} · capturada em ${fmtDataHora(f.criado_em)}</small></div>
         <div class="linha-flex"><button class="btn primario pequeno" data-ok>${ico('check')} Mesma pessoa</button><button class="btn perigo pequeno" data-nao>${ico('x')} Não é a mesma</button><button class="btn pequeno" data-abrir>Ampliar</button></div></div>`).join('');
     const ids = lista.flatMap((f) => [f.foto_suap_id, f.foto_id]).filter(Boolean);

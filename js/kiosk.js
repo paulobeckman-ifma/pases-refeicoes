@@ -1,8 +1,8 @@
 // Balcão: tela do operador (notebook). Reconhecimento facial, CPF no teclado numérico, foto, fila offline.
 import { $, esc, ico, uuid, idb, isoDe, hojeISO, horaDe, horaSegDe, cpfValido, sha256hex, modal, aviso, confirmar, TIPO } from './util.js';
-import { api, gas, gasConfigurado, relogio, foto, fotos, guardarFotoLocal, sessao } from './api.js';
+import { api, rpc, gas, gasConfigurado, relogio, foto, fotos, guardarFotoLocal, sessao } from './api.js';
 import { abrirCamera, pararCamera, capturar, cameraAtiva, preferencias, listarCameras } from './camera.js';
-import { carregarFace, detectarAoVivo, descritorDeImagem, Reconhecedor, semelhanca, MOLDURA } from './face.js';
+import { carregarFace, detectarAoVivo, descritorDeImagem, descritorMedio, Reconhecedor, semelhanca, MOLDURA } from './face.js';
 
 const JUSTIFICATIVAS = [
   'Falha ou desconexão da webcam',
@@ -31,7 +31,7 @@ export function montarBalcao(raiz, { aoSair }) {
       <div class="relogio" id="k-relogio">--:--:--</div>
       <span class="pilula" id="k-horario"></span>
       <span class="pilula" id="k-total">Hoje: 0</span>
-      <span class="pilula" id="k-rede"></span>
+      <button type="button" class="pilula clicavel" id="k-rede" title="Clique para verificar a conexão agora"></button>
       <span class="pilula oculto" id="k-face"></span>
       <span class="espaco"></span>
       <button class="btn" id="k-troca">${ico('atualizar')} Solicitar troca</button>
@@ -151,9 +151,26 @@ export function montarBalcao(raiz, { aoSair }) {
     const n = (await idb.chaves('fila').catch(() => [])).length;
     S.nFila = n;
     const el = $('#k-rede', raiz); if (!el) return;
-    if (ok && !n) { el.className = 'pilula ok'; el.innerHTML = `<i></i> Online`; }
-    else if (ok) { el.className = 'pilula aviso'; el.innerHTML = `<i></i> Enviando ${n} pendente(s)`; }
-    else { el.className = 'pilula erro'; el.innerHTML = `<i></i> Sem internet · ${n} na fila`; }
+    const at = ico('atualizar');
+    if (ok && !n) { el.className = 'pilula clicavel ok'; el.innerHTML = `<i></i> Online ${at}`; }
+    else if (ok) { el.className = 'pilula clicavel aviso'; el.innerHTML = `<i></i> Enviando ${n} pendente(s) ${at}`; }
+    else { el.className = 'pilula clicavel erro'; el.innerHTML = `<i></i> Sem internet · ${n} na fila ${at}`; }
+  }
+  // Confere a conexão de verdade (o "online" do navegador nem sempre muda quando a rede cai ou volta).
+  // Roda sozinho a cada 15 s e também ao clicar no indicador de conexão.
+  async function verificarConexao(manual = false) {
+    if (S.verificando) return; S.verificando = true;
+    const el = $('#k-rede', raiz); if (manual && el) el.classList.add('verificando');
+    const antes = S.online;
+    try {
+      await rpc('ping', {}, { timeout: 6000 });
+      await marcarRede(true);
+      if (!antes || manual) { sincronizar(); carregarDados().catch(() => {}); }
+      if (manual) aviso(S.nFila ? `Conectado. Enviando ${S.nFila} registro(s) pendente(s).` : 'Conectado à internet.', 'ok');
+    } catch (e) {
+      await marcarRede(false);
+      if (manual) aviso('Sem conexão com o servidor. Os registros continuam salvos neste computador e serão enviados quando a internet voltar.', 'erro');
+    } finally { S.verificando = false; if (el) el.classList.remove('verificando'); }
   }
 
   // ---------------------------------------------------------------- câmera e rosto
@@ -204,18 +221,26 @@ export function montarBalcao(raiz, { aoSair }) {
     // ignora rostos pequenos (pessoas ao fundo, na fila)
     if (rosto && rosto.detection.box.width < vw * 0.11) rosto = null;
     if (!rosto) {
-      desenharRosto(null); S.seq = 0; S.cand = null; S.semMatch = 0;
+      desenharRosto(null); S.seq = 0; S.cand = null; S.semMatch = 0; S.buf = [];
       if (S.estado === 'naoreconhecido' && Date.now() - S.naoRecEm > 5000) definirEstado('aguardando');
       return;
     }
-    const lim = Number(S.config.reconhecimento.limiar ?? 0.5);
-    const m = S.rec.tamanho ? S.rec.melhor(rosto.descriptor) : null;
-    const bateu = m && m.distancia <= lim && (m.segundo - m.distancia) >= 0.04 && S.alunos.has(m.aluno)
-      && !(S.ignorar.get(m.aluno) > Date.now());
+    // média dos últimos quadros do mesmo rosto (se o rosto "pulou" de lugar, recomeça)
+    const b = rosto.detection.box, cx = b.x + b.width / 2;
+    if (!S.buf || !S.bufCx || Math.abs(cx - S.bufCx) > b.width * 0.35) S.buf = [];
+    S.bufCx = cx; S.buf.push(rosto.descriptor); if (S.buf.length > 5) S.buf.shift();
+    const desc = S.buf.length >= 2 ? descritorMedio(S.buf) : rosto.descriptor;
+    const lim = Number(S.config.reconhecimento.limiar ?? 0.55);
+    const m = S.rec.tamanho ? S.rec.melhor(desc) : null;
+    // aceita quando está perto o bastante E claramente mais perto que o 2º aluno mais parecido;
+    // com distância um pouco acima do rigor, só aceita se a diferença para o 2º for grande
+    const margem = m ? m.segundo - m.distancia : 0;
+    const bateu = m && S.alunos.has(m.aluno) && !(S.ignorar.get(m.aluno) > Date.now())
+      && ((m.distancia <= lim && margem >= 0.05) || (m.distancia <= lim + 0.05 && margem >= 0.12));
     if (bateu) {
       S.seq = S.cand === m.aluno ? S.seq + 1 : 1; S.cand = m.aluno; S.semMatch = 0;
       desenharRosto(rosto, '#35d05a');
-      if (S.seq >= (S.config.reconhecimento.quadros || 3)) reconhecido(S.alunos.get(m.aluno), m.distancia);
+      if (S.seq >= (S.config.reconhecimento.quadros || 3)) { S.descAceito = Array.from(desc, (v) => Math.round(v * 1e6) / 1e6); reconhecido(S.alunos.get(m.aluno), m.distancia); }
       else tela({ tipo: 'estado', estado: 'analisando' });
     } else {
       S.cand = null; S.seq = 0; S.semMatch++;
@@ -359,7 +384,7 @@ export function montarBalcao(raiz, { aoSair }) {
   function cancelar() {
     if (S.estado === 'resultado') return fecharResultado();
     if (S.estado === 'confirmar' && S.candidato) S.ignorar.set(S.candidato.aluno.id, Date.now() + 8000);
-    S.candidato = null;
+    S.candidato = null; S.descAceito = null;
     if (S.estado !== 'processando') definirEstado('aguardando');
   }
   function teclaVirtual(k) {
@@ -459,11 +484,19 @@ export function montarBalcao(raiz, { aoSair }) {
       } catch (e) { console.warn('descritor', e); }
     }
 
+    // aprendizado: rosto reconhecido e confirmado pelo aluno vira nova referência (até 3 do balcão por aluno),
+    // o que aproxima as referências da câmera e da luz do refeitório; só quando ainda não é quase idêntico às existentes
+    let confirmada = false;
+    if (cap && metodo === 'facial' && S.descAceito && distancia != null && distancia > 0.3 && (aluno.nw || 0) < 3) {
+      descritor = S.descAceito; confirmada = true;
+    }
+    S.descAceito = null;
+
     const agora = relogio.agora();
     const it = {
       id: uuid(), aluno_id: aluno.id, matricula: aluno.m, registrado_em: agora.toISOString(), data: isoDe(agora), tipo,
       hora: horaDe(agora), metodo, distancia: distancia ?? null, foto: cap?.dataUrl || null, justificativa, observacao,
-      descritor, registrado: false, fotoId: null, tentativasFoto: 0, faceFeita: !descritor, offline: false, criado: Date.now()
+      descritor, confirmada, registrado: false, fotoId: null, tentativasFoto: 0, faceFeita: !descritor, offline: false, criado: Date.now()
     };
     S.emEnvio.add(it.id);
     let r;
@@ -486,7 +519,7 @@ export function montarBalcao(raiz, { aoSair }) {
       S.ultimos.unshift({ a: aluno.id, h: hora, t: tipo, nome: aluno.n, semFoto: !it.foto, fora: !dentro, offline: !!r.local });
       desenharUltimos(); atualizarTopo();
       S.ignorar.set(aluno.id, Date.now() + 20000);
-      resultado('ok', { aluno, hora, dentro, tipo, fotoAgora: it.foto, semFoto: !it.foto, offline: !!r.local, novaBase: !!descritor, observacao });
+      resultado('ok', { aluno, hora, dentro, tipo, fotoAgora: it.foto, semFoto: !it.foto, offline: !!r.local, novaBase: !!descritor && !confirmada, observacao });
       setTimeout(sincronizar, 300);
     } else {
       if (r.status === 'duplicado') { S.hoje.set(aluno.id, r.hora); S.hojeTipo.set(aluno.id, r.tipo || 'refeicao'); }
@@ -528,7 +561,7 @@ export function montarBalcao(raiz, { aoSair }) {
             it.fotoAnexada = true; await idb.put('fila', it.id, it);
           }
           if (!it.faceFeita && (it.fotoId || it.tentativasFoto >= 3 || !gasConfigurado())) {
-            await api('salvar_face', { p_aluno_id: it.aluno_id, p_descriptor: it.descritor, p_origem: 'webcam', p_foto_id: it.fotoId });
+            await api('salvar_face', { p_aluno_id: it.aluno_id, p_descriptor: it.descritor, p_origem: 'webcam', p_foto_id: it.fotoId, p_confirmada: !!it.confirmada });
             const a = S.alunos.get(it.aluno_id); if (a && !a.fb && it.fotoId) a.fb = it.fotoId;
             it.faceFeita = true; await idb.put('fila', it.id, it);
           }
@@ -620,6 +653,7 @@ export function montarBalcao(raiz, { aoSair }) {
     b.blur();
   });
   $('#k-tela', raiz).onclick = abrirTelaAluno;
+  $('#k-rede', raiz).onclick = () => verificarConexao(true);
   $('#k-troca', raiz).onclick = solicitarTroca;
   // pedido do aluno para trocar refeição por lanche (ou o contrário): vai para o coordenador decidir
   function solicitarTroca() {
@@ -690,8 +724,8 @@ export function montarBalcao(raiz, { aoSair }) {
     if (n && !(await confirmar(`Há ${n} registro(s) aguardando envio. Eles continuam salvos neste computador e serão enviados quando o balcão for aberto novamente. Sair mesmo assim?`))) return;
     aoSair();
   };
-  const aoOnline = () => { marcarRede(true); sincronizar(); carregarDados().catch(() => {}); };
-  const aoOffline = () => marcarRede(false);
+  const aoOnline = () => verificarConexao(false);
+  const aoOffline = () => verificarConexao(false);
   const aoSairPagina = (e) => { if (S.nFila) { e.preventDefault(); e.returnValue = ''; } };
   document.addEventListener('keydown', tecla);
   window.addEventListener('online', aoOnline);
@@ -704,6 +738,7 @@ export function montarBalcao(raiz, { aoSair }) {
     S.timers.relogio = setInterval(atualizarTopo, 1000);
     S.timers.cam = setInterval(() => { if (S.camOk && !cameraAtiva(video) && video.readyState >= 2) falhaCamera('A câmera parou de enviar imagem.'); }, 3000);
     S.timers.sinc = setInterval(sincronizar, 20000);
+    S.timers.rede = setInterval(() => verificarConexao(false), 15000);
     S.timers.dados = setInterval(() => carregarDados().catch(() => {}), 5 * 60000);
     await Promise.all([carregarDados().catch((e) => aviso(e.message, 'erro')), iniciarCamera()]);
     await iniciarFace();

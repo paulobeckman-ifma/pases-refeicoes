@@ -2,18 +2,18 @@
 import { $, $$, esc, ico, modal, aviso, confirmar, pedirTexto, fmtDataHora, baixarCsv, lerCsv, fmtData, fmtCpf, cpfValido, soDigitos, normalizar, debounce, hojeISO, addDias, MESES } from './util.js';
 import { api, gas, gasConfigurado, foto, fotos, guardarFotoLocal } from './api.js';
 import { abrirCamera, pararCamera, capturar, reduzirImagem, preferencias } from './camera.js';
-import { carregarFace, descritorDeImagem, imagemDeDataUrl } from './face.js';
+import { carregarFace, descritorDeImagem, imagemDeDataUrl, descritoresReferencia } from './face.js';
 import * as D from './dados.js';
 import { TIPO } from './util.js';
 
 export async function render(el, { cabecalho, perfil }) {
-  const admin = perfil === 'admin';
+  const admin = perfil === 'admin', operador = perfil === 'operador';
   let lista = await D.alunos(true);
 
   el.innerHTML = cabecalho('Alunos do PASES', 'Beneficiários cadastrados. Só alunos ativos conseguem registrar refeição no balcão.',
     admin ? `<button class="btn" id="a-novo">${ico('mais')} Novo aluno</button><button class="btn" id="a-imp">${ico('enviar')} Importar planilha</button>
       <button class="btn" id="a-suap">${ico('camera')} Fotos do SUAP</button><button class="btn" id="a-ref">${ico('rosto')} Gerar referências faciais</button>
-      <button class="btn" id="a-csv">${ico('baixar')} CSV</button>` : `<button class="btn" id="a-csv">${ico('baixar')} CSV</button>`) + `
+      <button class="btn" id="a-csv">${ico('baixar')} CSV</button>` : operador ? '' : `<button class="btn" id="a-csv">${ico('baixar')} CSV</button>`) + `
     <div class="barra-filtros">
       <label class="campo" style="min-width:260px"><span>Buscar</span><input type="search" id="a-busca" placeholder="Nome, matrícula ou CPF"></label>
       <label class="campo"><span>Modalidade</span><select id="a-mod"><option value="">Refeição e lanche</option><option value="refeicao">Refeição (almoço)</option><option value="lanche">Lanche</option></select></label>
@@ -56,11 +56,14 @@ export async function render(el, { cabecalho, perfil }) {
     const novo = !a.id;
     const corpo = `
       <div class="fotos-par ficha-fotos">
-        <div><div class="foto-box" data-fsuap>${a.foto_suap_id ? 'Carregando…' : 'Sem foto do SUAP'}<span class="rotulo">SUAP</span></div></div>
+        <div><div class="foto-box" data-fsuap>${a.foto_suap_id ? 'Carregando…' : 'Sem foto do SUAP'}<span class="rotulo">SUAP</span></div>
+          ${admin && !novo && a.foto_suap_id ? `<div class="linha-flex" style="margin-top:8px"><button class="btn pequeno perigo" data-excsuap>${ico('lixo')} Excluir foto do SUAP</button></div>` : ''}</div>
         <div><div class="foto-box" data-fbase>${a.foto_base_id ? 'Carregando…' : 'Sem foto de referência'}<span class="rotulo">Referência (webcam)</span></div>
-          ${admin && !novo ? `<div class="linha-flex" style="margin-top:8px"><button class="btn pequeno" data-cap>${ico('camera')} Capturar na webcam</button>
-            <label class="btn pequeno">${ico('enviar')} Enviar arquivo<input type="file" accept="image/*" data-arq hidden></label>
-            ${a.faces ? `<button class="btn pequeno perigo" data-apagaref>Apagar referências</button>` : ''}</div>` : ''}</div>
+          ${(admin || operador) && !novo && !a.cancelado_em ? `<div class="linha-flex" style="margin-top:8px"><button class="btn pequeno" data-cap>${ico('camera')} Capturar na webcam</button>
+            ${admin ? `<label class="btn pequeno">${ico('enviar')} Enviar arquivo<input type="file" accept="image/*" data-arq hidden></label>` : ''}
+            ${admin && a.foto_base_id ? `<button class="btn pequeno perigo" data-excbase>${ico('lixo')} Excluir foto de referência</button>` : ''}
+            ${admin && a.faces ? `<button class="btn pequeno perigo" data-apagaref>Apagar todas as referências</button>` : ''}</div>
+            ${operador ? '<p class="mudo pequeno" style="margin:6px 0 0">A nova foto só passa a valer depois que o administrador aprovar em "Validar rostos".</p>' : ''}` : ''}</div>
       </div>
       <form class="grade" data-form style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
         <label class="campo" style="grid-column:1/-1"><span>Nome completo</span><input type="text" name="nome" value="${esc(a.nome || '')}" required ${admin ? '' : 'disabled'}></label>
@@ -80,7 +83,9 @@ export async function render(el, { cabecalho, perfil }) {
       ${novo ? '' : `<div><h3 style="margin-bottom:8px">Refeições nos últimos 12 meses</h3><div data-hist class="pequeno mudo">Carregando…</div></div>`}`;
     const m = modal({
       titulo: novo ? 'Novo aluno' : a.nome, largo: true, corpo,
-      botoes: admin ? [
+      botoes: operador ? [
+        { texto: `${ico('atualizar')} Solicitar troca`, acao: async () => { await pedirTroca(a); return false; } },
+        { texto: 'Fechar' }] : admin ? [
         ...(novo ? [] : a.cancelado_em ? [
           { texto: `${ico('atualizar')} Reativar cadastro`, acao: async (fechar) => {
             if (!(await confirmar(`Reativar o cadastro de ${esc(a.nome)}? Ele volta a poder registrar no balcão.`))) return false;
@@ -100,6 +105,7 @@ export async function render(el, { cabecalho, perfil }) {
             } catch (e) { aviso(e.message, 'erro'); }
             return false; } }
         ]),
+        ...(novo ? [] : [{ texto: `${ico('atualizar')} Solicitar troca`, acao: async () => { await pedirTroca(a); return false; } }]),
         { texto: 'Fechar' }, { texto: 'Salvar', classe: 'primario', acao: async (fechar, el) => {
         const f = $('[data-form]', el);
         const cpf = soDigitos(f.cpf.value);
@@ -121,7 +127,7 @@ export async function render(el, { cabecalho, perfil }) {
           Object.entries(pm).sort().reverse().map(([k, n]) => `<span class="selo" style="margin:3px 4px 0 0">${MESES[+k.slice(5) - 1].slice(0, 3)}/${k.slice(2, 4)}: ${n}</span>`).join('') : 'Nenhuma refeição registrada.';
       }).catch(() => {});
     }
-    if (!admin || novo) return;
+    if (!(admin || operador) || novo || a.cancelado_em) return;
     // A ficha continua aberta: a foto aparece no quadro "Referência" com o resultado, para o administrador conferir.
     const boxBase = () => $('[data-fbase]', el2);
     const estadoBase = (dataUrl, selo) => {
@@ -134,9 +140,8 @@ export async function render(el, { cabecalho, perfil }) {
       try {
         const up = await gas('upload', { tipo: 'base', nome: `base_${a.matricula || a.id}`, dados: dataUrl });
         guardarFotoLocal(up.id, dataUrl);
-        await api('aluno_foto', { p_aluno_id: a.id, p_campo: 'base', p_foto_id: up.id });
-        a.foto_base_id = up.id;
-        estadoBase(dataUrl, { cor: 'ambar', texto: 'Foto anexada · procurando o rosto…' });
+        if (admin) { await api('aluno_foto', { p_aluno_id: a.id, p_campo: 'base', p_foto_id: up.id }); a.foto_base_id = up.id; }
+        estadoBase(dataUrl, { cor: 'ambar', texto: 'Foto enviada · procurando o rosto…' });
         await carregarFace();
         const r = await descritorDeImagem(canvas || await imagemDeDataUrl(dataUrl));
         if (!r) {
@@ -144,8 +149,13 @@ export async function render(el, { cabecalho, perfil }) {
           aviso('Foto anexada, mas nenhum rosto foi detectado nela. Envie outra, de frente e bem iluminada.', 'erro');
         } else {
           await api('salvar_face', { p_aluno_id: a.id, p_descriptor: r.descritor, p_origem: 'manual', p_foto_id: up.id });
-          estadoBase(dataUrl, { cor: 'verde', texto: 'Foto anexada · referência facial salva' });
-          aviso('Foto de referência salva.', 'ok');
+          if (operador) {
+            estadoBase(dataUrl, { cor: 'ambar', texto: 'Aguardando aprovação do administrador' });
+            aviso('Foto enviada para "Validar rostos". Passa a valer depois da aprovação do administrador.', 'ok');
+          } else {
+            estadoBase(dataUrl, { cor: 'verde', texto: 'Foto anexada · referência facial salva' });
+            aviso('Foto de referência salva.', 'ok');
+          }
         }
         recarregar();
       } catch (e) {
@@ -154,12 +164,31 @@ export async function render(el, { cabecalho, perfil }) {
       }
     };
     $('[data-cap]', el2).onclick = async () => { const r = await capturaWebcam(); if (r) usarFoto(r.dataUrl, r.canvas); };
-    $('[data-arq]', el2).onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; const r = await reduzirImagem(f, 480); usarFoto(r.dataUrl, r.canvas); };
+    if ($('[data-arq]', el2)) $('[data-arq]', el2).onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; const r = await reduzirImagem(f, 480); usarFoto(r.dataUrl, r.canvas); };
+    const exc = async (campo, texto) => {
+      if (!(await confirmar(texto, { perigo: true, ok: 'Excluir' }))) return;
+      try { const r = await api('aluno_foto_excluir', { p_aluno_id: a.id, p_campo: campo });
+        aviso(`Foto excluída.${r.referencias_apagadas ? ` ${r.referencias_apagadas} referência(s) facial(is) apagada(s).` : ''}`, 'ok'); m.fechar(); recarregar();
+      } catch (e) { aviso(e.message, 'erro'); }
+    };
+    const es = $('[data-excsuap]', el2), eb = $('[data-excbase]', el2);
+    if (es) es.onclick = () => exc('suap', `Excluir a foto do SUAP de ${esc(a.nome)}? As referências faciais geradas a partir dela também serão apagadas.`);
+    if (eb) eb.onclick = () => exc('base', `Excluir a foto de referência (webcam) de ${esc(a.nome)}? A referência facial dela também será apagada.`);
     const ap = $('[data-apagaref]', el2);
     if (ap) ap.onclick = async () => {
       if (!(await confirmar('Apagar todas as referências faciais deste aluno? Ele precisará digitar o CPF no próximo almoço para criar uma nova.', { perigo: true, ok: 'Apagar' }))) return;
       await api('faces_apagar_aluno', { p_aluno_id: a.id }); aviso('Referências apagadas.', 'ok'); m.fechar(); recarregar();
     };
+  }
+
+  function pedirTroca(a) {
+    const de = a.modalidade === 'lanche' ? 'lanche' : 'refeicao', para = de === 'lanche' ? 'refeicao' : 'lanche';
+    return pedirTexto('Solicitar troca de modalidade', `${a.nome}: ${TIPO[de]} → ${TIPO[para]}. Motivo informado pelo aluno (o pedido vai para o coordenador)`)
+      .then(async (motivo) => {
+        if (!motivo) return;
+        try { await api('troca_solicitar', { p_aluno_id: a.id, p_motivo: motivo }); aviso(`Pedido enviado: ${TIPO[de]} → ${TIPO[para]}. Aguarda o coordenador.`, 'ok'); }
+        catch (e) { aviso(e.message, 'erro'); }
+      });
   }
 
   function capturaWebcam() {
@@ -257,7 +286,13 @@ export async function render(el, { cabecalho, perfil }) {
   }
 
   async function gerarReferencias() {
-    const alvo = lista.filter((a) => a.foto_suap_id && !(a.faces || {}).suap);
+    const pend = lista.filter((a) => a.foto_suap_id && !(a.faces || {}).suap && !a.cancelado_em);
+    const todos = lista.filter((a) => a.foto_suap_id && !a.cancelado_em);
+    const escolha = await modal({ titulo: 'Gerar referências faciais do SUAP', corpo: `<p style="margin:0">A versão 1.5 gera até 3 referências por foto (original, espelhada e com correção de luz), o que melhora o reconhecimento de fotos antigas ou pequenas.</p>
+      <p class="mudo pequeno">Mantenha esta aba aberta e visível até o fim (o navegador desacelera abas escondidas).</p>`,
+      botoes: [{ texto: 'Cancelar', valor: null }, { texto: `Só as pendentes (${pend.length})`, valor: 'pend' }, { texto: `Recalcular todas (${todos.length})`, classe: 'primario', valor: 'todas' }] }).promessa;
+    if (!escolha) return;
+    const alvo = escolha === 'todas' ? todos : pend;
     if (!alvo.length) return aviso('Nenhuma foto do SUAP pendente de processamento.');
     const p = progresso('Gerando referências faciais');
     p.passo(0, alvo.length, 'Carregando o reconhecimento facial…');
@@ -270,9 +305,9 @@ export async function render(el, { cabecalho, perfil }) {
         p.passo(i + j, alvo.length, `${i + j + 1} de ${alvo.length}: ${a.nome}`);
         const url = fs[a.foto_suap_id];
         if (!url) { sem++; p.log(`${esc(a.nome)}: foto indisponível`); continue; }
-        const r = await descritorDeImagem(await imagemDeDataUrl(url), { minimoLargura: 40 }).catch(() => null);
-        if (!r) { sem++; p.log(`${esc(a.nome)}: nenhum rosto detectado na foto do SUAP`); continue; }
-        await api('salvar_face', { p_aluno_id: a.id, p_descriptor: r.descritor, p_origem: 'suap', p_foto_id: a.foto_suap_id }); ok++;
+        const ds = await descritoresReferencia(await imagemDeDataUrl(url)).catch(() => null);
+        if (!ds || !ds.length) { sem++; p.log(`${esc(a.nome)}: nenhum rosto detectado na foto do SUAP`); continue; }
+        await api('salvar_faces_suap', { p_aluno_id: a.id, p_descritores: ds, p_foto_id: a.foto_suap_id }); ok++;
       }
     }
     p.fim(`${ok} referência(s) criada(s). ${sem} foto(s) sem rosto utilizável: esses alunos criarão a referência ao digitar o CPF no balcão.`);
@@ -283,7 +318,7 @@ export async function render(el, { cabecalho, perfil }) {
   $('#a-busca').oninput = debounce(filtrar, 200);
   $('#a-filtro').onchange = filtrar; $('#a-mod').onchange = filtrar;
   $('#a-corpo').onclick = (e) => { const tr = e.target.closest('tr[data-id]'); if (tr) ficha(lista.find((a) => a.id === tr.dataset.id)); };
-  $('#a-csv').onclick = () => baixarCsv('pases_alunos', ['nome', 'matricula', 'cpf', 'curso', 'nivel', 'situacao_suap', 'ativo', 'cancelado_em', 'motivo_cancelamento', 'refeicoes', 'ultima', 'referencia_facial'],
+  if ($('#a-csv')) $('#a-csv').onclick = () => baixarCsv('pases_alunos', ['nome', 'matricula', 'cpf', 'curso', 'nivel', 'situacao_suap', 'ativo', 'cancelado_em', 'motivo_cancelamento', 'refeicoes', 'ultima', 'referencia_facial'],
     lista.map((a) => [a.nome, a.matricula, a.cpf, a.curso, a.nivel, a.situacao_suap, a.ativo ? 'sim' : 'não', a.cancelado_em ? fmtData(a.cancelado_em.slice(0, 10)) : '', a.cancelado_motivo || '', a.total, fmtData(a.ultima), a.faces ? 'sim' : 'não']));
   if (admin) {
     $('#a-novo').onclick = () => ficha(null);
