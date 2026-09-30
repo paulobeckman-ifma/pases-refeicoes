@@ -2,6 +2,7 @@
 import { $, esc, ico, uuid, idb, isoDe, hojeISO, horaDe, horaSegDe, cpfValido, sha256hex, modal, aviso, confirmar, TIPO } from './util.js';
 import { api, rpc, gas, gasConfigurado, relogio, foto, fotos, guardarFotoLocal, sessao } from './api.js';
 import { abrirCamera, pararCamera, capturar, cameraAtiva, preferencias, listarCameras, molduraVideo } from './camera.js';
+import { conectarCanal, dispositivo } from './tempo-real.js';
 import { carregarFace, detectarAoVivo, descritorDeImagem, descritorMedio, Reconhecedor, semelhanca } from './face.js';
 
 const JUSTIFICATIVAS = [
@@ -11,7 +12,7 @@ const JUSTIFICATIVAS = [
   'Outro motivo'
 ];
 
-export function montarBalcao(raiz, { aoSair }) {
+function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
   const S = {
     alunos: new Map(), porHash: new Map(), hoje: new Map(), hojeTipo: new Map(), ultimos: [], sal: '', tipoSel: null,
     config: { horario_inicio: '11:30', horario_fim: '13:30', reconhecimento: { ativo: true, limiar: 0.5, quadros: 3, confirmar: true } }, cap: null,
@@ -21,7 +22,51 @@ export function montarBalcao(raiz, { aoSair }) {
     semFotoForcado: null, timers: [], resultadoTimer: null, confirmarTimer: null, emEnvio: new Set()
   };
   const canal = new BroadcastChannel('pases-tela-aluno');
-  const tela = (m) => { try { canal.postMessage(m); } catch { /* janela fechada */ } };
+  // tudo o que vai para a tela do aluno também vai para os notebooks de apoio (menos o contorno do rosto, que é contínuo)
+  const ESPELHO = new Set(['estado', 'cpf', 'resultado', 'frame']);
+  let rt = null, ultimaTela = null, ultimoTopo = '';
+  const espelhar = (m) => { if (rt) try { rt.enviar('tela', m); } catch { /* */ } };
+  const tela = (m) => {
+    try { canal.postMessage(m); } catch { /* janela fechada */ }
+    if (m.tipo === 'estado' || m.tipo === 'resultado') ultimaTela = m;
+    if (ESPELHO.has(m.tipo)) espelhar(m);
+    else if (m.tipo === 'topo' && m.hora !== ultimoTopo) { ultimoTopo = m.hora; espelhar(m); }
+  };
+  const status = { t: '', sub: '' };
+  function enviarResumo() {
+    if (!rt) return;
+    espelhar({ tipo: 'status', ...status });
+    espelhar({ tipo: 'hoje', n: S.hoje.size, lista: S.ultimos.slice(0, 150) });
+    espelhar({ tipo: 'principal', usuario: sessao.usuario?.nome || '', semFoto: S.semFotoForcado || null, online: S.online });
+  }
+  // quadro da câmera no fim do reconhecimento (só uma imagem pequena, não o vídeo)
+  function enviarQuadro() {
+    if (!rt || !S.camOk || !cameraAtiva(video)) return;
+    const c = capturar(video, 360, 0.7); if (c) tela({ tipo: 'frame', img: c.dataUrl, espelho: preferencias.espelhar });
+  }
+  function ligarEspelho() {
+    if (!canalRt || rt) return;
+    rt = conectarCanal(canalRt, {
+      aoMsg: (ev, p) => {
+        if (ev === 'ola') { enviarResumo(); if (ultimaTela) espelhar(ultimaTela); }
+        else if (ev === 'cmd' && p) {
+          if (p.k === 'tecla') teclaVirtual(p.v);
+          else if (p.k === 'semfoto') { S.semFotoForcado = p.j || null; atualizarModoSemFoto(); enviarResumo(); }
+        } else if (ev === 'assumido' && p?.disp && p.disp !== disp) perdeu();
+      },
+      aoEstado: (ok) => { if (ok) enviarResumo(); }
+    });
+  }
+  async function pulso() {
+    try { const r = await api('balcao_pulso', { p_dispositivo: disp }, { timeout: 8000 }); if (r && r.principal === false) perdeu(); }
+    catch { /* sem internet: continua como principal */ }
+  }
+  let perdido = false;
+  function perdeu() {
+    if (perdido) return; perdido = true;
+    aviso('Outro notebook assumiu o balcão. Este passa a ser apoio (espelho).', 'erro');
+    aoPerder?.();
+  }
 
   raiz.innerHTML = `
   <div class="balcao balcao-espelho">
@@ -245,7 +290,7 @@ export function montarBalcao(raiz, { aoSair }) {
     }
   }
   function naoReconhecido(motivo) {
-    S.cap = null; mostrarRosto(null);
+    S.cap = null; mostrarRosto(null); enviarQuadro();
     definirEstado('naoreconhecido', { tela: { motivo } });
     S.confirmarTimer = setTimeout(() => { if (S.estado === 'naoreconhecido') definirEstado('aguardando'); }, 12000);
   }
@@ -257,7 +302,7 @@ export function montarBalcao(raiz, { aoSair }) {
   }
 
   // ---------------------------------------------------------------- estados e mensagens
-  function mensagem(t, sub = '') { $('#k-msg', raiz).innerHTML = `${esc(t)}${sub ? `<small>${esc(sub)}</small>` : ''}`; }
+  function mensagem(t, sub = '') { $('#k-msg', raiz).innerHTML = `${esc(t)}${sub ? `<small>${esc(sub)}</small>` : ''}`; status.t = t; status.sub = sub; espelhar({ tipo: 'status', t, sub }); }
   function mostrarTipos(mostrar) {
     const el = $('#k-tipos', raiz); if (!el) return;
     el.classList.toggle('oculto', !mostrar || !S.tipoSel);
@@ -303,6 +348,7 @@ export function montarBalcao(raiz, { aoSair }) {
     if (!aluno.at) return resultado('inativo', { aluno });
     const fotoCad = await fotoRapida(aluno.fb || aluno.fs);
     if (S.estado !== 'capturando') return;
+    enviarQuadro();
     S.fotoCand = fotoCad;
     S.tipoSel = modalidadeDe(aluno);
     definirEstado('confirmar', { aluno, distancia, tela: telaEscolha(aluno, fotoCad, distancia) });
@@ -375,6 +421,7 @@ export function montarBalcao(raiz, { aoSair }) {
     S.candidato = { aluno, distancia: null, metodo: 'cpf' };
     S.fotoCand = await fotoRapida(aluno.fb || aluno.fs);
     S.tipoSel = modalidadeDe(aluno);
+    enviarQuadro();   // o apoio vê quem está diante da câmera ao confirmar pelo CPF
     definirEstado('confirmar', { aluno, distancia: null, tela: telaEscolha(aluno, S.fotoCand) });
   }
   function cancelar() {
@@ -598,7 +645,7 @@ export function montarBalcao(raiz, { aoSair }) {
     if (S.estado === 'resultado') definirEstado('aguardando');
   }
 
-  function desenharUltimos() { atualizarTopo(); }
+  function desenharUltimos() { atualizarTopo(); if (rt) espelhar({ tipo: 'hoje', n: S.hoje.size, lista: S.ultimos.slice(0, 150) }); }
   function verHoje() {
     modal({ titulo: `Registros de hoje (${S.hoje.size})`, corpo: `<ul class="lista-hoje">${S.ultimos.slice(0, 200).map((u) => `<li class="${u.semFoto ? 'sem-foto' : ''}"><span class="hora">${esc(u.h)}</span>
       <span class="nome">${esc(u.nome)}</span>${u.t === 'lanche' ? '<span class="selo azul">lanche</span>' : '<span class="selo verde">refeição</span>'}${u.semFoto ? '<span class="selo vermelho">sem foto</span>' : ''}${u.fora ? '<span class="selo ambar">fora</span>' : ''}${u.offline ? '<span class="selo">fila</span>' : ''}</li>`).join('')
@@ -607,6 +654,7 @@ export function montarBalcao(raiz, { aoSair }) {
 
 
   function atualizarModoSemFoto() {
+    if (rt) espelhar({ tipo: 'principal', usuario: sessao.usuario?.nome || '', semFoto: S.semFotoForcado || null, online: S.online });
     const el = $('#k-modo-semfoto', raiz);
     if (S.semFotoForcado) { el.innerHTML = `<b>Próximo registro SEM FOTO</b>: ${esc(S.semFotoForcado)} <button class="btn pequeno" id="k-cancela-sf">cancelar</button>`; el.classList.remove('oculto');
       $('#k-cancela-sf', el).onclick = () => { S.semFotoForcado = null; atualizarModoSemFoto(); }; }
@@ -750,6 +798,8 @@ export function montarBalcao(raiz, { aoSair }) {
     definirEstado('aguardando');
     if (S.faceOk) $('#k-face', raiz).innerHTML = `${ico('rosto')} Facial ativo · ${S.rec.tamanho} ref.`;
     ciclo(); sincronizar();
+    ligarEspelho();
+    if (disp) { S.timers.pulso = setInterval(pulso, 10000); }
   })();
 
   return function desmontar() {
@@ -760,5 +810,212 @@ export function montarBalcao(raiz, { aoSair }) {
     window.removeEventListener('online', aoOnline); window.removeEventListener('offline', aoOffline);
     window.removeEventListener('beforeunload', aoSairPagina);
     pararCamera(S.stream); tela({ tipo: 'estado', estado: 'fechado' }); canal.close();
+    if (rt) { try { rt.enviar('encerrado', { disp }); } catch { /* */ } setTimeout(() => rt.fechar(), 300); }
+    if (disp && !perdido) api('balcao_liberar', { p_dispositivo: disp }, { timeout: 5000 }).catch(() => {});
   };
+}
+
+/*
+ * Balcão em mais de um notebook: só um é o PRINCIPAL (câmera, reconhecimento e registros).
+ * Ao abrir, se outro notebook estiver ativo, este pode abrir como APOIO (espelho do principal, com comandos)
+ * ou ASSUMIR o balcão. Sem internet, abre direto como principal (os registros ficam na fila deste computador).
+ */
+export function montarBalcao(raiz, opcoes) {
+  let atual = null, parado = false;
+  const disp = dispositivo();
+  const trocar = (fn) => { if (parado) return; try { atual?.(); } catch (e) { console.warn(e); } atual = fn(); };
+  const principal = (canalRt) => trocar(() => montarPrincipal(raiz, { ...opcoes, disp, canalRt, aoPerder: () => abrirApoio() }));
+  const abrirApoio = async () => {
+    let st = null; try { st = await api('balcao_status', {}, { timeout: 8000 }); } catch { /* */ }
+    trocar(() => montarApoio(raiz, { ...opcoes, disp, canalRt: st?.canal, ativo: st?.ativo, aoAssumir: (canal) => principal(canal) }));
+  };
+  (async () => {
+    raiz.innerHTML = '<div class="balcao balcao-espelho"><div class="vazio" style="margin:auto;color:#cfe0d7">Verificando se o balcão já está aberto em outro notebook…</div></div>';
+    let r;
+    try { r = await api('balcao_assumir', { p_dispositivo: disp, p_forcar: false }, { timeout: 8000 }); }
+    catch (e) { if (e.rede || /HTTP_404|balcao_assumir/.test(e.codigo || e.message || '')) return principal(null); throw e; }
+    if (r.ok) return principal(r.canal);
+    if (parado) return;
+    const a = r.ativo || {};
+    const escolha = await modal({
+      titulo: 'O balcão já está aberto em outro notebook', fecharFora: false,
+      corpo: `<p style="margin:0">Atendente: <b>${esc(a.usuario || '')}</b>, desde ${esc((a.desde || '').slice(11, 16))}.</p>
+        <p class="mudo" style="margin:8px 0 0"><b>Abrir como apoio</b>: este notebook espelha o balcão ativo e pode digitar CPF, confirmar, cancelar e marcar "sem foto"; a câmera e os registros continuam no outro notebook.<br>
+        <b>Assumir o balcão</b>: este notebook passa a ser o principal (use se o outro travou ou vai sair); o outro vira apoio.</p>`,
+      botoes: [{ texto: 'Voltar', valor: 'voltar' }, { texto: 'Assumir o balcão', classe: 'perigo', valor: 'assumir' }, { texto: 'Abrir como apoio', classe: 'primario', valor: 'apoio' }]
+    }).promessa;
+    if (parado) return;
+    if (escolha === 'apoio') return trocar(() => montarApoio(raiz, { ...opcoes, disp, canalRt: r.canal, ativo: r.ativo, aoAssumir: (canal) => principal(canal) }));
+    if (escolha === 'assumir') return assumir(r.canal);
+    opcoes.aoSair?.({ semLogout: true });
+  })().catch((e) => { raiz.innerHTML = `<div class="vazio">${esc(e.message || e)}</div>`; });
+  async function assumir(canalAntigo) {
+    try {
+      const r = await api('balcao_assumir', { p_dispositivo: disp, p_forcar: true });
+      const avisar = conectarCanal(r.canal || canalAntigo, {});
+      setTimeout(() => { avisar.enviar('assumido', { disp }); setTimeout(() => avisar.fechar(), 800); }, 800);
+      principal(r.canal || canalAntigo);
+    } catch (e) { aviso(e.message, 'erro'); }
+  }
+  return function desmontar() { parado = true; try { atual?.(); } catch { /* */ } };
+}
+
+function montarApoio(raiz, { aoSair, disp, canalRt, ativo, aoAssumir }) {
+  const canalLocal = new BroadcastChannel('pases-tela-aluno');   // repassa o espelho ao iframe (e a uma tela do aluno aberta aqui)
+  const timers = {};
+  let rt = null, nHoje = 0, lista = [], principalNome = ativo?.usuario || '', conectado = false, ultimoVisto = Date.now(), encerrado = false;
+  raiz.innerHTML = `
+  <div class="balcao balcao-espelho apoio">
+    <div class="balcao-topo">
+      <img src="assets/simbolo-ifma.png" alt="">
+      <div class="titulo"><b>Balcão PASES · APOIO</b><small>Espelho do balcão de <span id="a-princ">${esc(principalNome)}</span></small></div>
+      <div class="relogio" id="a-relogio">--:--:--</div>
+      <button type="button" class="pilula clicavel" id="a-total" title="Ver os registros de hoje">Hoje: 0</button>
+      <span class="pilula" id="a-con"></span>
+      <span class="espaco"></span>
+      <button class="btn" id="a-tec">${ico('teclado')} Teclado</button>
+      <button class="btn" id="a-troca">${ico('atualizar')} Solicitar troca</button>
+      <button class="btn" id="a-registros">${ico('lista')} Registros</button>
+      <button class="btn" id="a-semfoto">${ico('semcamera')} Sem foto</button>
+      <button class="btn perigo" id="a-assumir">${ico('balcao')} Assumir o balcão</button>
+      <button class="btn" id="a-sair">${ico('sair')} ${sessao.perfil === 'admin' ? 'Painel' : 'Sair'}</button>
+    </div>
+    <div class="balcao-status"><span id="a-msg">Conectando ao balcão principal…</span><span class="caixa erro-caixa oculto" id="a-semfoto-aviso"></span></div>
+    <div class="balcao-corpo-espelho">
+      <iframe src="tela-aluno.html?embed=1&apoio=1" title="Espelho do balcão"></iframe>
+      <div class="caixa erro-caixa oculto" id="a-encerrado" style="position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:5;text-align:center">
+        <b>O balcão principal foi fechado.</b><br><button class="btn primario" id="a-abrir" style="margin-top:8px">${ico('balcao')} Abrir o balcão neste notebook</button></div>
+      <div class="teclado-pop oculto" id="a-tecpop">
+        <div class="teclado">
+          ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button data-d="${n}">${n}</button>`).join('')}
+          <button class="apagar" data-a="Backspace">⌫</button><button data-d="0">0</button><button class="ok" data-a="Enter">ENTER</button>
+        </div>
+        <button class="btn fantasma pequeno" data-a="Escape" style="width:100%;justify-content:center;margin-top:6px">ESC · cancelar</button>
+      </div>
+    </div>
+  </div>`;
+  const cmd = (p) => { if (!rt || !conectado) return aviso('Sem conexão com o balcão principal.', 'erro'); rt.enviar('cmd', p); };
+  const tecla = (v) => cmd({ k: 'tecla', v });
+  const marcarCon = () => {
+    const el = $('#a-con', raiz); if (!el) return;
+    const vivo = conectado && Date.now() - ultimoVisto < 45000;
+    el.className = 'pilula ' + (vivo ? 'ok' : 'erro'); el.innerHTML = `<i></i> ${vivo ? 'Espelhando' : 'Sem conexão com o balcão'}`;
+  };
+  if (canalRt) {
+    rt = conectarCanal(canalRt, {
+      aoEstado: (ok) => { conectado = ok; marcarCon(); if (ok) rt.enviar('ola', {}); },
+      aoMsg: (ev, p) => {
+        ultimoVisto = Date.now();
+        if (ev === 'tela' && p) {
+          if (!$('#a-msg', raiz)) return;
+          if (p.tipo === 'status') $('#a-msg', raiz).innerHTML = `${esc(p.t)}${p.sub ? `<small>${esc(p.sub)}</small>` : ''}`;
+          else if (p.tipo === 'hoje') { nHoje = p.n; lista = p.lista || []; $('#a-total', raiz).textContent = `Hoje: ${nHoje}`; }
+          else if (p.tipo === 'principal') {
+            principalNome = p.usuario || principalNome; $('#a-princ', raiz).textContent = principalNome;
+            const sf = $('#a-semfoto-aviso', raiz); sf.classList.toggle('oculto', !p.semFoto); sf.innerHTML = p.semFoto ? `<b>Próximo registro SEM FOTO</b>: ${esc(p.semFoto)}` : '';
+          } else try { canalLocal.postMessage(p); } catch { /* */ }
+        } else if (ev === 'encerrado') { encerrado = true; $('#a-encerrado', raiz).classList.remove('oculto'); $('#a-msg', raiz).textContent = 'O balcão principal foi fechado.'; }
+        else if (ev === 'assumido' && p?.disp !== disp) { encerrado = false; $('#a-encerrado', raiz).classList.add('oculto'); rt.enviar('ola', {}); }
+        marcarCon();
+      }
+    });
+  } else $('#a-msg', raiz).textContent = 'Sem conexão com o servidor: o espelho precisa de internet.';
+  // relógio próprio e checagem do principal
+  timers.rel = setInterval(() => { $('#a-relogio', raiz).textContent = horaSegDe(relogio.agora()); marcarCon(); }, 1000);
+  timers.st = setInterval(async () => {
+    try {
+      const st = await api('balcao_status', {}, { timeout: 8000 });
+      if (!st.ativo) { encerrado = true; $('#a-encerrado', raiz).classList.remove('oculto'); }
+      else if (st.ativo.dispositivo === disp) { limpar(); aoAssumir?.(st.canal); }
+      else { encerrado = false; $('#a-encerrado', raiz).classList.add('oculto'); principalNome = st.ativo.usuario; $('#a-princ', raiz).textContent = principalNome; }
+    } catch { /* sem internet */ }
+  }, 15000);
+  // teclas: deste notebook (ou do iframe) viram comandos para o balcão principal
+  const aoTecla = (e) => {
+    if (document.querySelector('.fundo-modal')) return;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+    let k = e.key; const cod = e.code || '';
+    if (/^Numpad\d$/.test(cod)) k = cod.slice(-1);
+    else if (cod === 'NumpadEnter') k = 'Enter';
+    else if (k === '-' || k === 'Delete' || cod === 'NumpadSubtract' || cod === 'NumpadDecimal') k = 'Escape';
+    if (/^\d$/.test(k) || ['Enter', 'Backspace', 'Escape'].includes(k)) { e.preventDefault(); tecla(k); }
+  };
+  document.addEventListener('keydown', aoTecla);
+  canalLocal.onmessage = (e) => {
+    if (e.data?.tipo === 'tecla' && !document.querySelector('.fundo-modal')) tecla(e.data.k);
+    else if (e.data?.tipo === 'ola' && rt && conectado) rt.enviar('ola', {});
+  };
+  $('#a-tecpop', raiz).addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return; b.blur();
+    tecla(b.dataset.d || b.dataset.a);
+  });
+  const tecAberto = (v) => { $('#a-tecpop', raiz).classList.toggle('oculto', !v); $('#a-tec', raiz).classList.toggle('ativo', v); };
+  $('#a-tec', raiz).onclick = () => tecAberto($('#a-tecpop', raiz).classList.contains('oculto'));
+  $('#a-total', raiz).onclick = () => modal({ titulo: `Registros de hoje (${nHoje})`, corpo: `<ul class="lista-hoje">${lista.map((u) => `<li class="${u.semFoto ? 'sem-foto' : ''}"><span class="hora">${esc(u.h)}</span>
+      <span class="nome">${esc(u.nome)}</span>${u.t === 'lanche' ? '<span class="selo azul">lanche</span>' : '<span class="selo verde">refeição</span>'}${u.semFoto ? '<span class="selo vermelho">sem foto</span>' : ''}${u.fora ? '<span class="selo ambar">fora</span>' : ''}${u.offline ? '<span class="selo">fila</span>' : ''}</li>`).join('') || '<li class="mudo">Nenhum registro ainda.</li>'}</ul>`, botoes: [{ texto: 'Fechar' }] });
+  $('#a-registros', raiz).onclick = () => { location.hash = '#/registros'; };
+  $('#a-semfoto', raiz).onclick = () => {
+    modal({ titulo: 'Próximo registro sem foto', corpo: `<p style="margin:0">Justificativa (vale para o próximo registro feito no balcão principal):</p>
+      ${JUSTIFICATIVAS.map((j, i) => `<label class="check"><input type="radio" name="just" value="${i}" ${i === 0 ? 'checked' : ''}> ${esc(j)}</label>`).join('')}
+      <label class="campo"><span>Detalhe (obrigatório em "Outro motivo")</span><input type="text" data-det maxlength="300"></label>`,
+      botoes: [{ texto: 'Cancelar' }, { texto: 'Enviar ao balcão', classe: 'primario', acao: (fechar, el) => {
+        const i = Number($('input[name=just]:checked', el).value), det = $('[data-det]', el).value.trim();
+        if (i === 3 && det.length < 5) { aviso('Descreva o motivo.', 'erro'); return false; }
+        cmd({ k: 'semfoto', j: i === 3 ? det : JUSTIFICATIVAS[i] + (det ? ` · ${det}` : '') }); fechar(); return false;
+      } }] });
+  };
+  $('#a-troca', raiz).onclick = () => solicitarTrocaApoio();
+  async function solicitarTrocaApoio() {
+    let alunos = [];
+    try { alunos = await api('alunos_listar'); } catch (e) { return aviso(e.message, 'erro'); }
+    let sel = null;
+    const norm = (x) => (x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    modal({
+      titulo: 'Solicitar troca de modalidade',
+      corpo: `<p class="mudo" style="margin:0">O pedido vai para o coordenador do programa.</p>
+        <label class="campo"><span>Aluno (nome ou matrícula)</span><input type="text" data-q autocomplete="off"></label>
+        <div data-res class="lista-busca"></div><div data-sel></div>
+        <label class="campo"><span>Motivo informado pelo aluno</span><textarea data-m rows="3"></textarea></label>`,
+      aoAbrir: (el) => {
+        const q = $('[data-q]', el), res = $('[data-res]', el);
+        q.oninput = () => {
+          const t = norm(q.value.trim()); if (t.length < 3) { res.innerHTML = ''; return; }
+          res.innerHTML = alunos.filter((a) => a.ativo && (norm(a.nome).includes(t) || (a.matricula || '').toLowerCase().includes(t))).slice(0, 8)
+            .map((a) => `<button type="button" class="item-busca" data-id="${a.id}"><b>${esc(a.nome)}</b> <span class="mudo">${esc(a.matricula || '')} · ${TIPO[a.modalidade === 'lanche' ? 'lanche' : 'refeicao']}</span></button>`).join('');
+        };
+        res.onclick = (e) => {
+          const b = e.target.closest('[data-id]'); if (!b) return;
+          sel = alunos.find((a) => a.id === b.dataset.id); res.innerHTML = ''; q.value = sel.nome;
+          const de = sel.modalidade === 'lanche' ? 'lanche' : 'refeicao', para = de === 'lanche' ? 'refeicao' : 'lanche';
+          $('[data-sel]', el).innerHTML = `<div class="caixa" style="margin:4px 0 0"><b>${esc(sel.nome)}</b> · ${TIPO[de]} → ${TIPO[para]}</div>`;
+        };
+      },
+      botoes: [{ texto: 'Cancelar' }, { texto: 'Enviar ao coordenador', classe: 'primario', acao: async (fechar, el) => {
+        if (!sel) { aviso('Escolha o aluno na lista.', 'erro'); return false; }
+        const motivo = $('[data-m]', el).value.trim(); if (motivo.length < 5) { aviso('Informe o motivo do pedido.', 'erro'); return false; }
+        try { const r = await api('troca_solicitar', { p_aluno_id: sel.id, p_motivo: motivo }); aviso(`Pedido enviado: ${TIPO[r.de]} → ${TIPO[r.para]}.`, 'ok'); }
+        catch (e) { aviso(e.message, 'erro'); return false; }
+      } }]
+    });
+  }
+  const assumirAqui = async () => {
+    if (!encerrado && !(await confirmar(`Assumir o balcão? O notebook de ${esc(principalNome)} deixa de registrar e passa a ser apoio.`, { ok: 'Assumir', perigo: true }))) return;
+    try {
+      const r = await api('balcao_assumir', { p_dispositivo: disp, p_forcar: true });
+      if (rt) rt.enviar('assumido', { disp });
+      limpar(); setTimeout(() => aoAssumir?.(r.canal), 400);
+    } catch (e) { aviso(e.message, 'erro'); }
+  };
+  $('#a-assumir', raiz).onclick = assumirAqui; $('#a-abrir', raiz).onclick = assumirAqui;
+  $('#a-sair', raiz).onclick = () => aoSair();
+  let limpo = false;
+  function limpar() {
+    if (limpo) return; limpo = true;
+    Object.values(timers).forEach((t) => clearInterval(t));
+    document.removeEventListener('keydown', aoTecla);
+    try { canalLocal.close(); } catch { /* */ }
+    if (rt) setTimeout(() => rt.fechar(), 500);
+  }
+  marcarCon();
+  return limpar;
 }

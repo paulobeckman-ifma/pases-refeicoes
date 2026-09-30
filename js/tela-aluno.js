@@ -9,6 +9,7 @@ const ICO = {
   alerta: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 8v5m0 4h.01"/></svg>'
 };
 const EMBED = new URLSearchParams(location.search).has('embed');
+const APOIO = new URLSearchParams(location.search).has('apoio');   // notebook de apoio: sem câmera, mostra o último quadro do balcão principal
 if (EMBED) document.body.classList.add('embed');
 
 const canal = new BroadcastChannel('pases-tela-aluno');
@@ -17,6 +18,7 @@ let stream = null, espelhar = preferencias.espelhar, cameraId = preferencias.cam
 let retorno = null, ultimoEstado = '', rostoAtual = { box: null, cor: '#fff', fora: false };
 
 async function iniciarCamera() {
+  if (APOIO) return;
   pararCamera(stream);
   aplicarZoom(video, zoom, espelhar); over.style.transform = espelhar ? 'scaleX(-1)' : '';
   try { stream = await abrirCamera(video, cameraId); $('#semcam').hidden = true; }
@@ -25,8 +27,23 @@ async function iniciarCamera() {
 }
 
 // a câmera fica ligada o tempo todo, mas a imagem só aparece durante o reconhecimento e a confirmação
-const COM_IMAGEM = ['capturando', 'confirmar', 'processando'];
-function imagem(visivel) { camBox.classList.toggle('espera', !visivel); if (visivel) desenhar(); }
+const COM_IMAGEM = APOIO ? ['capturando', 'confirmar', 'processando', 'naoreconhecido'] : ['capturando', 'confirmar', 'processando'];
+let quadro = null;
+function imagem(visivel) {
+  if (APOIO) {
+    // no apoio não há vídeo: mostra o último quadro capturado pelo balcão principal (fim do reconhecimento)
+    const img = $('#quadro'); const mostrar = visivel && quadro && ultimoEstado !== 'capturando';
+    img.hidden = !mostrar; if (mostrar) img.src = quadro.img; img.style.transform = quadro?.espelho ? 'scaleX(-1)' : '';
+    camBox.classList.toggle('espera', !mostrar);
+    $('#repouso-txt').innerHTML = ultimoEstado === 'capturando' ? '<b>Reconhecendo…</b><span>o aluno está diante da câmera do balcão principal</span>' : '<b>Espelho do balcão</b><span>a imagem aparece ao fim do reconhecimento</span>';
+    return;
+  }
+  camBox.classList.toggle('espera', !visivel); if (visivel) desenhar();
+}
+if (APOIO) {
+  video.hidden = true; over.hidden = true;
+  camBox.insertAdjacentHTML('beforeend', '<img id="quadro" alt="" hidden style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain">');
+}
 
 function desenhar() {
   const { box, cor, fora } = rostoAtual;
@@ -53,6 +70,7 @@ function aoEstado(m) {
   switch (m.estado) {
     case 'aguardando': estadoPadrao(); break;
     case 'capturando':
+      quadro = null; imagem(true);
       $('#dica').textContent = 'Encaixe seu rosto na moldura';
       mostrar(`<div class="girando"></div><h2>Olhe para a câmera</h2><p class="grande">Encaixe o rosto dentro da moldura e fique parado</p>
         <p>Não funcionou? Digite seu CPF.</p>`); break;
@@ -116,6 +134,7 @@ canal.onmessage = (e) => {
   } else if (m.tipo === 'camera') {
     if (m.ok && !stream) iniciarCamera();
   } else if (m.tipo === 'rosto') { rostoAtual = { box: m.box, cor: m.cor, fora: m.foraMoldura }; desenhar(); }
+  else if (m.tipo === 'frame') { if (APOIO) { quadro = { img: m.img, espelho: m.espelho }; imagem(COM_IMAGEM.includes(ultimoEstado)); } }
   else if (m.tipo === 'previa') { if (m.on) $('#dica').textContent = 'Ajuste do enquadramento'; imagem(m.on || COM_IMAGEM.includes(ultimoEstado)); }
   else if (m.tipo === 'estado') aoEstado(m);
   else if (m.tipo === 'cpf') { const el = $('#cpf'); if (el) el.textContent = m.texto || ' '; }

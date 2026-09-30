@@ -3,7 +3,7 @@ import { $, $$, esc, ico, aviso, CFG } from './util.js';
 import { rpc, api, sessao, relogio, traduzir } from './api.js';
 import { montarBalcao } from './kiosk.js';
 
-export const VERSAO = '1.6.0';
+export const VERSAO = '1.7.0';
 const raiz = $('#app');
 let desmontar = null;
 
@@ -114,7 +114,7 @@ async function navegar() {
   const rota = ROTAS[id];
   if (!rota || !rota.perfis.includes(sessao.perfil)) { location.hash = '#/' + inicial(); return; }
   if (rota.balcao) {
-    desmontar = montarBalcao(raiz, { aoSair: () => { if (sessao.perfil === 'admin') location.hash = '#/painel'; else sair(); } });
+    desmontar = montarBalcao(raiz, { aoSair: (o) => { if (sessao.perfil === 'admin') location.hash = '#/painel'; else if (o?.semLogout) location.hash = '#/registros'; else sair(); } });
     return;
   }
   const el = shell(id);
