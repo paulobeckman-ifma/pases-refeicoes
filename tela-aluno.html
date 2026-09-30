@@ -22,8 +22,19 @@
     .faixa.fora { background: #5a3d0a; color: #ffd98f; }
     main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; padding: 24px 28px; height: calc(100vh - 86px); }
     .camera { position: relative; background: #000; border-radius: 22px; overflow: hidden; }
-    .camera video, .camera canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-    .espelho { transform: scaleX(-1); }
+    .camera video, .camera canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .camera video { object-fit: contain; transform-origin: center; }
+    .camera.espera video, .camera.espera canvas, .camera.espera .dica { visibility: hidden; }
+    .camera .repouso { position: absolute; inset: 0; display: none; place-items: center; text-align: center; color: var(--tinta-2); padding: 30px; }
+    .camera.espera .repouso { display: grid; }
+    .repouso svg { width: 120px; height: 120px; opacity: .55; }
+    .repouso b { display: block; font-size: 30px; color: var(--tinta); margin: 18px 0 8px; }
+    .repouso span { font-size: 22px; }
+    .modalidade { font-size: 30px; font-weight: 800; padding: 14px; border-radius: 16px; background: var(--verde); border: 3px solid #b7f0c5; }
+    .modalidade.lanche { background: #3b7dd8; border-color: #c4dcff; }
+    .modalidade small { display: block; font-size: 14px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; opacity: .85; }
+    body.embed .topo, body.embed .barra-ctrl { display: none; }
+    body.embed main { height: 100vh; padding: 14px; gap: 14px; }
     .camera .dica { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); background: rgba(0,0,0,.65); padding: 10px 22px; border-radius: 99px; font-size: 22px; font-weight: 600; white-space: nowrap; }
     .camera .semcam { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; font-size: 26px; color: #ffb4b7; padding: 30px; }
     .painel { overflow: hidden; background: var(--cartao); border: 1px solid var(--linha); border-radius: 22px; padding: 24px 28px; display: flex; flex-direction: column; justify-content: center; gap: 14px; text-align: center; }
@@ -66,11 +77,13 @@
     <span class="hora" id="hora">--:--</span>
   </div>
   <main>
-    <div class="camera" id="camera">
+    <div class="camera espera" id="camera">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="over"></canvas>
       <div class="dica" id="dica">Olhe para a câmera</div>
       <div class="semcam" id="semcam" hidden>Câmera indisponível.<br>Digite seu CPF no teclado.</div>
+      <div class="repouso"><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M9 10h.01M15 10h.01M9.5 15a3.5 3.5 0 0 0 5 0"/></svg>
+        <b>Aperte ENTER</b><span>para o reconhecimento facial</span></div></div>
     </div>
     <section class="painel" id="painel"></section>
   </main>
