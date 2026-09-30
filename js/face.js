@@ -33,7 +33,7 @@ export const MOLDURA = { rx: 0.2, ry: 0.36 };
 const maior = (lista) => lista.reduce((a, b) => (!a || b.detection.box.area > a.detection.box.area ? b : a), null);
 
 /** Detecção rápida em vídeo ao vivo. Retorna o maior rosto com descritor, ou null. */
-export async function detectarAoVivo(video) {
+export async function detectarAoVivo(video, M = MOLDURA) {
   const fa = await carregarFace();
   // com placa de vídeo usa entrada maior (caixa do rosto mais precisa = descritor melhor); na CPU fica leve
   const tam = fa.tf.getBackend() === 'webgl' ? 416 : 320;
@@ -42,10 +42,10 @@ export async function detectarAoVivo(video) {
   // Fila atrás do aluno: só vale o rosto com o centro dentro da moldura oval; entre esses, o maior e mais centralizado.
   const vw = video.videoWidth || 1, vh = video.videoHeight || 1;
   const pontos = r.map((f) => {
-    const b = f.detection.box, dx = ((b.x + b.width / 2) / vw - 0.5) / MOLDURA.rx, dy = ((b.y + b.height / 2) / vh - 0.5) / MOLDURA.ry;
+    const b = f.detection.box, dx = ((b.x + b.width / 2) / vw - 0.5) / M.rx, dy = ((b.y + b.height / 2) / vh - 0.5) / M.ry;
     const dist = Math.hypot(dx, dy);                 // 0 = centro, 1 = borda da moldura
     return { f, dist, nota: (b.width / vw) * (1.2 - Math.min(dist, 1)) };
-  }).filter((x) => x.dist <= 1);
+  }).filter((x) => x.dist <= 1 && x.f.detection.box.width >= vw * M.rx * 2 * 0.3);   // rosto pequeno dentro da moldura = pessoa ao fundo
   if (!pontos.length) return { rosto: null, quantidade: r.length, foraMoldura: r.length > 0 };
   pontos.sort((a, b) => b.nota - a.nota);
   return { rosto: pontos[0].f, quantidade: r.length };

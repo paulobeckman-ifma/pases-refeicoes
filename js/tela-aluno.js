@@ -1,5 +1,5 @@
-// Tela voltada ao aluno (2º monitor). Recebe os eventos do balcão pelo BroadcastChannel.
-import { abrirCamera, pararCamera, preferencias } from './camera.js';
+// Tela voltada ao aluno (2º monitor) e espelho dentro do balcão (?embed=1). Recebe os eventos do balcão pelo BroadcastChannel.
+import { abrirCamera, pararCamera, preferencias, desenharMoldura, aplicarZoom } from './camera.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -8,70 +8,68 @@ const ICO = {
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
   alerta: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 8v5m0 4h.01"/></svg>'
 };
+const EMBED = new URLSearchParams(location.search).has('embed');
+if (EMBED) document.body.classList.add('embed');
+
 const canal = new BroadcastChannel('pases-tela-aluno');
-const video = $('#video'), over = $('#over'), painel = $('#painel');
-let stream = null, espelhar = preferencias.espelhar, cameraId = preferencias.camera, retorno = null, ultimoEstado = '';
+const video = $('#video'), over = $('#over'), painel = $('#painel'), camBox = $('#camera');
+let stream = null, espelhar = preferencias.espelhar, cameraId = preferencias.camera, zoom = preferencias.zoom, tam = preferencias.moldura;
+let retorno = null, ultimoEstado = '', rostoAtual = { box: null, cor: '#fff', fora: false };
 
 async function iniciarCamera() {
   pararCamera(stream);
-  video.classList.toggle('espelho', espelhar); over.classList.toggle('espelho', espelhar);
+  aplicarZoom(video, zoom, espelhar); over.style.transform = espelhar ? 'scaleX(-1)' : '';
   try { stream = await abrirCamera(video, cameraId); $('#semcam').hidden = true; }
   catch (e) { stream = null; $('#semcam').hidden = false; }
+  desenhar();
 }
 
-const MOLDURA = { rx: 0.2, ry: 0.36 };   // igual a face.js
-function desenharRosto(box, cor, foraMoldura) {
-  const cw = over.clientWidth, ch = over.clientHeight;
-  over.width = cw; over.height = ch;
-  const g = over.getContext('2d'); g.clearRect(0, 0, cw, ch);
-  if (!video.videoWidth) return;
-  // o vídeo usa object-fit: cover
-  const vw = video.videoWidth, vh = video.videoHeight, s = Math.max(cw / vw, ch / vh);
-  const ox = (cw - vw * s) / 2, oy = (ch - vh * s) / 2;
-  g.save(); g.setLineDash([18, 12]); g.lineWidth = 5;
-  g.strokeStyle = box ? 'rgba(53,208,90,.95)' : foraMoldura ? 'rgba(242,179,61,.95)' : 'rgba(255,255,255,.8)';
-  g.beginPath(); g.ellipse(cw / 2, ch / 2, vw * s * MOLDURA.rx, vh * s * MOLDURA.ry, 0, 0, Math.PI * 2); g.stroke(); g.restore();
-  if (!box && foraMoldura) $('#dica').textContent = 'Encaixe seu rosto na moldura';
-  if (!box) return;
-  g.strokeStyle = cor || '#fff'; g.lineWidth = 6;
-  const x = ox + box.x * vw * s, y = oy + box.y * vh * s, w = box.w * vw * s, h = box.h * vh * s;
-  g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, 18) : g.rect(x, y, w, h); g.stroke();
+// a câmera fica ligada o tempo todo, mas a imagem só aparece durante o reconhecimento e a confirmação
+const COM_IMAGEM = ['capturando', 'confirmar', 'processando'];
+function imagem(visivel) { camBox.classList.toggle('espera', !visivel); if (visivel) desenhar(); }
+
+function desenhar() {
+  const { box, cor, fora } = rostoAtual;
+  desenharMoldura(over, video, { zoom, tam, box, cor, contorno: box ? 'rgba(53,208,90,.95)' : fora ? 'rgba(242,179,61,.95)' : 'rgba(255,255,255,.85)' });
 }
+window.addEventListener('resize', desenhar);
+video.addEventListener('loadedmetadata', desenhar);
 
 function mostrar(html, classe = '') { painel.className = 'painel ' + classe; painel.innerHTML = html; }
+const modalidade = (t) => `<div class="modalidade ${t === 'lanche' ? 'lanche' : ''}"><small>Beneficiário de</small>${t === 'lanche' ? 'Lanche' : 'Refeição'}</div>`;
 
 function estadoPadrao() {
-  $('#dica').textContent = 'Encaixe seu rosto na moldura';
-  mostrar(`<h2>Bem-vindo(a)!</h2><p class="grande">Encaixe seu rosto na moldura da câmera</p>
-    <p>ou digite seu <b>CPF</b> no teclado e pressione <span class="tecla">ENTER</span></p>`);
+  imagem(false);
+  mostrar(`<h2>Bem-vindo(a)!</h2>
+    <p class="grande">Aperte <span class="tecla">ENTER</span> para o reconhecimento facial</p>
+    <p>ou digite seu <b>CPF</b> no teclado</p>`);
 }
 
 function aoEstado(m) {
-  if (m.estado === ultimoEstado && !['confirmar', 'tipo', 'processando'].includes(m.estado)) return;
+  if (m.estado === ultimoEstado && !['confirmar', 'processando', 'capturando'].includes(m.estado)) return;
   ultimoEstado = m.estado;
   clearTimeout(retorno);
+  imagem(COM_IMAGEM.includes(m.estado));
   switch (m.estado) {
     case 'aguardando': estadoPadrao(); break;
-    case 'analisando':
-      $('#dica').textContent = 'Identificando…';
-      mostrar(`<div class="girando"></div><h2>Identificando…</h2><p>Mantenha o rosto parado, de frente para a câmera.</p>`); break;
+    case 'capturando':
+      $('#dica').textContent = 'Encaixe seu rosto na moldura';
+      mostrar(`<div class="girando"></div><h2>Olhe para a câmera</h2><p class="grande">Encaixe o rosto dentro da moldura e fique parado</p>
+        <p>Não funcionou? Digite seu CPF.</p>`); break;
     case 'naoreconhecido':
-      $('#dica').textContent = 'Rosto não reconhecido';
-      mostrar(`<h2>Não reconhecemos seu rosto</h2><p class="grande">Digite seu <b>CPF</b> no teclado e pressione <span class="tecla">ENTER</span></p>
-        <p>A foto de hoje será usada para reconhecer você nos próximos dias.</p>`, 'aviso'); break;
-    case 'confirmar': case 'tipo': {
+      mostrar(`<h2>Não reconhecemos seu rosto</h2><p class="grande">Digite seu <b>CPF</b> no teclado</p>
+        <p>${esc(m.motivo || 'A foto de hoje será usada para reconhecer você nos próximos dias.')}</p>`, 'aviso'); break;
+    case 'confirmar': {
       $('#dica').textContent = 'Identificado';
-
       mostrar(`<div class="fotos uma"><div class="foto">${m.foto ? `<img src="${m.foto}" alt="">` : 'Sem foto de cadastro'}<span>Cadastro</span></div></div>
         <div class="nome">${esc(m.nome)}</div><div class="sub">Matrícula ${esc(m.matricula || '')}<br>${esc(m.curso || '')}</div>
-        <div class="opcao sel ${m.tipoSel === 'lanche' ? 'lanche' : ''}">${m.tipoSel === 'lanche' ? 'Lanche' : 'Refeição'}</div>
-        ${m.confirmar === false ? '<p>Registrando…</p>' : `<p class="grande">Confirme com <span class="tecla">ENTER</span></p>`}
-        ${m.estado === 'confirmar' ? '<p>Não é você? Tecle <span class="tecla">-</span> e digite seu CPF.</p>' : ''}`, 'ok'); break; }
+        ${modalidade(m.tipoSel)}
+        <p class="grande">Confirme com <span class="tecla">ENTER</span></p>
+        <p>Não é você? Tecle <span class="tecla">ESC</span> ou <span class="tecla">-</span>.</p>`, 'ok'); break; }
     case 'cpf':
-      $('#dica').textContent = 'Digitando CPF';
-      mostrar(`<h2>Digite seu CPF</h2><div class="cpf" id="cpf">&nbsp;</div><p>Pressione <span class="tecla">ENTER</span> para confirmar</p>`); break;
+      mostrar(`<h2>Digite seu CPF</h2><div class="cpf" id="cpf">&nbsp;</div><p>Ao digitar o último número, seus dados aparecem para você confirmar.</p>`); break;
     case 'processando':
-      mostrar(`<div class="girando"></div><h2>Registrando…</h2>${m.nome ? `<p class="grande">${esc(m.nome)}</p>` : ''}`); break;
+      mostrar(`<div class="girando"></div><h2>${m.nome ? 'Registrando…' : 'Conferindo…'}</h2>${m.nome ? `<p class="grande">${esc(m.nome)}</p>` : ''}`); break;
     case 'atendente':
       mostrar(`<h2>Aguarde o atendente</h2><p class="grande">A câmera não pôde registrar sua foto.</p>`, 'aviso'); break;
     case 'fechado':
@@ -81,7 +79,7 @@ function aoEstado(m) {
 }
 
 function aoResultado(m) {
-  ultimoEstado = 'resultado';
+  ultimoEstado = 'resultado'; imagem(false);
   const icone = m.classe === 'ok' ? ICO.check : m.classe === 'aviso' ? ICO.alerta : ICO.x;
   let corpo = '';
   if (m.status === 'ok') {
@@ -110,14 +108,17 @@ canal.onmessage = (e) => {
     const f = $('#faixa'); f.className = 'faixa ' + (m.dentro ? 'ok' : 'fora');
     f.textContent = m.dentro ? `Almoço: ${m.inicio} às ${m.fim}` : `Fora do horário (${m.inicio} às ${m.fim})`;
   } else if (m.tipo === 'config') {
-    const mudou = m.camera !== cameraId || m.espelhar !== espelhar;
+    const mudou = m.camera !== cameraId;
     cameraId = m.camera; espelhar = m.espelhar;
-    if (mudou || !stream) iniciarCamera();
+    if (m.zoom) zoom = m.zoom; if (m.moldura) tam = m.moldura;
+    aplicarZoom(video, zoom, espelhar); over.style.transform = espelhar ? 'scaleX(-1)' : '';
+    if (mudou || !stream) iniciarCamera(); else desenhar();
   } else if (m.tipo === 'camera') {
     if (m.ok && !stream) iniciarCamera();
-  } else if (m.tipo === 'rosto') desenharRosto(m.box, m.cor, m.foraMoldura);
+  } else if (m.tipo === 'rosto') { rostoAtual = { box: m.box, cor: m.cor, fora: m.foraMoldura }; desenhar(); }
+  else if (m.tipo === 'previa') { if (m.on) $('#dica').textContent = 'Ajuste do enquadramento'; imagem(m.on || COM_IMAGEM.includes(ultimoEstado)); }
   else if (m.tipo === 'estado') aoEstado(m);
-  else if (m.tipo === 'cpf') { const el = $('#cpf'); if (el) el.textContent = m.texto || ' '; }
+  else if (m.tipo === 'cpf') { const el = $('#cpf'); if (el) el.textContent = m.texto || ' '; }
   else if (m.tipo === 'resultado') aoResultado(m);
 };
 

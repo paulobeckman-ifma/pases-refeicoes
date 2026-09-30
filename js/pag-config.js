@@ -1,7 +1,7 @@
 // Configurações: câmera deste computador (todos) e parâmetros do sistema, Drive e backup (admin)
 import { $, $$, esc, ico, aviso, confirmar, fmtDataHora, idb, CFG, DIAS_SEMANA } from './util.js';
 import { api, gas, gasConfigurado } from './api.js';
-import { listarCameras, abrirCamera, pararCamera, preferencias } from './camera.js';
+import { listarCameras, abrirCamera, pararCamera, preferencias, desenharMoldura, aplicarZoom } from './camera.js';
 import * as D from './dados.js';
 
 export async function render(el, { cabecalho, perfil }) {
@@ -16,10 +16,15 @@ export async function render(el, { cabecalho, perfil }) {
         <div class="grade" style="grid-template-columns:1fr;align-content:start">
           <label class="campo"><span>Webcam</span><select id="c-cam"><option value="">Carregando…</option></select></label>
           <label class="check"><input type="checkbox" id="c-esp" ${preferencias.espelhar ? 'checked' : ''}> Espelhar a imagem na tela (como um espelho)</label>
+          <label class="campo"><span>Zoom da imagem: <b id="c-zv">${preferencias.zoom.toFixed(2)}×</b> (menor = afasta: use quando o rosto do aluno fica maior que a moldura)</span>
+            <input type="range" id="c-zoom" min="0.5" max="2.5" step="0.05" value="${preferencias.zoom}"></label>
+          <label class="campo"><span>Tamanho da moldura: <b id="c-mv">${Math.round(preferencias.moldura * 100)}%</b></span>
+            <input type="range" id="c-mold" min="0.7" max="1.3" step="0.05" value="${preferencias.moldura}"></label>
           <div class="linha-flex"><button class="btn primario" id="c-salvar-cam">Salvar câmera</button><button class="btn" id="c-atual">${ico('atualizar')} Atualizar lista</button></div>
           <div id="c-fila" class="pequeno mudo"></div>
         </div>
-        <div class="foto-box" style="background:#000"><video id="c-video" autoplay muted playsinline style="width:100%;height:100%;object-fit:contain"></video><span class="rotulo">Pré-visualização</span></div>
+        <div class="foto-box" style="background:#000;overflow:hidden"><video id="c-video" autoplay muted playsinline style="width:100%;height:100%;object-fit:contain;transform-origin:center"></video>
+          <canvas id="c-over" style="position:absolute;inset:0;width:100%;height:100%"></canvas><span class="rotulo">Pré-visualização (como no balcão)</span></div>
       </div>
     </div>
     ${admin ? `
@@ -32,12 +37,11 @@ export async function render(el, { cabecalho, perfil }) {
     <div class="cartao"><h2>${ico('rosto')} Reconhecimento facial</h2>
       <div class="grade" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
         <label class="check"><input type="checkbox" id="c-rec" ${cfg.reconhecimento?.ativo ? 'checked' : ''}> Usar reconhecimento facial no balcão</label>
-        <label class="check"><input type="checkbox" id="c-conf" ${cfg.reconhecimento?.confirmar !== false ? 'checked' : ''}> Aluno confirma com ENTER (recomendado)</label>
-        <label class="campo"><span>Rigor: <b id="c-lim-v">${Number(cfg.reconhecimento?.limiar ?? 0.55).toFixed(2)}</b> (menor = mais rigoroso)</span>
-          <input type="range" id="c-lim" min="0.40" max="0.65" step="0.01" value="${cfg.reconhecimento?.limiar ?? 0.55}"></label>
+        <label class="campo"><span>Rigor: <b id="c-lim-v">${Number(cfg.reconhecimento?.limiar ?? 0.5).toFixed(2)}</b> (menor = mais rigoroso)</span>
+          <input type="range" id="c-lim" min="0.40" max="0.65" step="0.01" value="${cfg.reconhecimento?.limiar ?? 0.5}"></label>
         <label class="campo"><span>Quadros seguidos para confirmar</span><input type="number" id="c-qua" min="2" max="8" value="${cfg.reconhecimento?.quadros ?? 3}"></label>
       </div>
-      <p class="mudo pequeno">Padrão recomendado: rigor 0,55 e 3 quadros. O balcão compara a média de vários quadros e só aceita quando o aluno está claramente mais próximo do que o 2º mais parecido. Se alunos forem confundidos entre si, diminua para 0,50. Se muitos não forem reconhecidos, aumente para 0,58 e gere de novo as referências do SUAP (Alunos &gt; Gerar referências faciais &gt; Recalcular todas).</p>
+      <p class="mudo pequeno">Padrão recomendado: rigor 0,50 e 3 quadros. No balcão, o reconhecimento começa quando o aluno aperta ENTER: o sistema junta vários quadros do rosto, compara a média com as referências e só aceita quando o aluno está claramente mais próximo do que o 2º mais parecido; depois o aluno confirma com ENTER. Se alunos forem confundidos entre si, diminua para 0,45. Se muitos não forem reconhecidos, aumente para 0,55.</p>
       <button class="btn primario" id="c-salvar-rec">Salvar reconhecimento</button></div>
 
     <div class="cartao"><h2>${ico('grafico')} Semestres (para os relatórios)</h2>
@@ -69,15 +73,24 @@ export async function render(el, { cabecalho, perfil }) {
     if (!l.length) $('#c-cam').innerHTML = '<option value="">Nenhuma câmera encontrada</option>';
     previa();
   }
+  const zoomSel = () => Number($('#c-zoom').value), moldSel = () => Number($('#c-mold').value);
+  const redesenhar = () => {
+    const v = $('#c-video'), c = $('#c-over'); if (!v || !c) return;
+    aplicarZoom(v, zoomSel(), $('#c-esp').checked);
+    desenharMoldura(c, v, { zoom: zoomSel(), tam: moldSel() });
+  };
   async function previa() {
     pararCamera(stream); const v = $('#c-video'); if (!v) return;
-    v.style.transform = $('#c-esp').checked ? 'scaleX(-1)' : '';
     try { stream = await abrirCamera(v, $('#c-cam').value); } catch (e) { aviso(e.message, 'erro'); }
+    redesenhar();
   }
-  $('#c-cam').onchange = previa; $('#c-esp').onchange = previa; $('#c-atual').onclick = preencherCameras;
+  $('#c-zoom').oninput = () => { $('#c-zv').textContent = `${zoomSel().toFixed(2)}×`; redesenhar(); };
+  $('#c-mold').oninput = () => { $('#c-mv').textContent = `${Math.round(moldSel() * 100)}%`; redesenhar(); };
+  $('#c-video').addEventListener('loadedmetadata', redesenhar);
+  $('#c-cam').onchange = previa; $('#c-esp').onchange = redesenhar; $('#c-atual').onclick = preencherCameras;
   $('#c-salvar-cam').onclick = () => {
     const o = $('#c-cam').selectedOptions[0];
-    preferencias.salvar({ camera: $('#c-cam').value, rotulo: o?.dataset.rot || '', espelhar: $('#c-esp').checked });
+    preferencias.salvar({ camera: $('#c-cam').value, rotulo: o?.dataset.rot || '', espelhar: $('#c-esp').checked, zoom: zoomSel(), moldura: moldSel() });
     aviso('Câmera salva neste computador. Reabra o balcão para aplicar.', 'ok');
   };
   preencherCameras();
@@ -96,7 +109,7 @@ export async function render(el, { cabecalho, perfil }) {
   const salvarCfg = async (dados, msg) => { try { await api('config_salvar', { p_dados: dados }); D.invalidarConfig(); aviso(msg, 'ok'); } catch (e) { aviso(e.message, 'erro'); } };
   $('#c-salvar-hor').onclick = () => salvarCfg({ horario_inicio: $('#c-ini').value, horario_fim: $('#c-fim').value }, 'Horário salvo. Vale para os próximos registros.');
   $('#c-lim').oninput = () => ($('#c-lim-v').textContent = Number($('#c-lim').value).toFixed(2));
-  $('#c-salvar-rec').onclick = () => salvarCfg({ reconhecimento: { ativo: $('#c-rec').checked, confirmar: $('#c-conf').checked, limiar: Number($('#c-lim').value), quadros: Math.max(2, Math.min(8, Number($('#c-qua').value) || 3)) } }, 'Reconhecimento salvo. Reabra o balcão para aplicar.');
+  $('#c-salvar-rec').onclick = () => salvarCfg({ reconhecimento: { ativo: $('#c-rec').checked, confirmar: true, limiar: Number($('#c-lim').value), quadros: Math.max(2, Math.min(8, Number($('#c-qua').value) || 3)) } }, 'Reconhecimento salvo. Reabra o balcão para aplicar.');
 
   // ---------------------------------------------------------------- semestres
   let semestres = [...(cfg.semestres || [])];

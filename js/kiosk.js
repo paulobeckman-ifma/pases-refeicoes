@@ -1,8 +1,8 @@
 // Balcão: tela do operador (notebook). Reconhecimento facial, CPF no teclado numérico, foto, fila offline.
 import { $, esc, ico, uuid, idb, isoDe, hojeISO, horaDe, horaSegDe, cpfValido, sha256hex, modal, aviso, confirmar, TIPO } from './util.js';
 import { api, rpc, gas, gasConfigurado, relogio, foto, fotos, guardarFotoLocal, sessao } from './api.js';
-import { abrirCamera, pararCamera, capturar, cameraAtiva, preferencias, listarCameras } from './camera.js';
-import { carregarFace, detectarAoVivo, descritorDeImagem, descritorMedio, Reconhecedor, semelhanca, MOLDURA } from './face.js';
+import { abrirCamera, pararCamera, capturar, cameraAtiva, preferencias, listarCameras, molduraVideo } from './camera.js';
+import { carregarFace, detectarAoVivo, descritorDeImagem, descritorMedio, Reconhecedor, semelhanca } from './face.js';
 
 const JUSTIFICATIVAS = [
   'Falha ou desconexão da webcam',
@@ -14,7 +14,7 @@ const JUSTIFICATIVAS = [
 export function montarBalcao(raiz, { aoSair }) {
   const S = {
     alunos: new Map(), porHash: new Map(), hoje: new Map(), hojeTipo: new Map(), ultimos: [], sal: '', tipoSel: null,
-    config: { horario_inicio: '11:30', horario_fim: '13:30', reconhecimento: { ativo: true, limiar: 0.5, quadros: 3, confirmar: true } },
+    config: { horario_inicio: '11:30', horario_fim: '13:30', reconhecimento: { ativo: true, limiar: 0.5, quadros: 3, confirmar: true } }, cap: null,
     rec: new Reconhecedor(), estado: 'aguardando', cpf: '', ultimoDigitoEm: 0,
     cand: null, seq: 0, semMatch: 0, candidato: null, ignorar: new Map(),
     camOk: false, faceOk: false, stream: null, parado: false, online: navigator.onLine, sinc: false,
@@ -24,16 +24,17 @@ export function montarBalcao(raiz, { aoSair }) {
   const tela = (m) => { try { canal.postMessage(m); } catch { /* janela fechada */ } };
 
   raiz.innerHTML = `
-  <div class="balcao">
+  <div class="balcao balcao-espelho">
     <div class="balcao-topo">
       <img src="assets/simbolo-ifma.png" alt="">
       <div class="titulo"><b>Balcão PASES</b><small>Atendente: ${esc(sessao.usuario?.nome || '')}</small></div>
       <div class="relogio" id="k-relogio">--:--:--</div>
       <span class="pilula" id="k-horario"></span>
-      <span class="pilula" id="k-total">Hoje: 0</span>
+      <button type="button" class="pilula clicavel" id="k-total" title="Ver os registros de hoje">Hoje: 0</button>
       <button type="button" class="pilula clicavel" id="k-rede" title="Clique para verificar a conexão agora"></button>
       <span class="pilula oculto" id="k-face"></span>
       <span class="espaco"></span>
+      <button class="btn" id="k-tec" title="Mostrar ou esconder o teclado numérico na tela">${ico('teclado')} Teclado</button>
       <button class="btn" id="k-troca">${ico('atualizar')} Solicitar troca</button>
       <button class="btn" id="k-registros">${ico('lista')} Registros</button>
       <button class="btn" id="k-camera">${ico('camera')} Câmera</button>
@@ -41,36 +42,28 @@ export function montarBalcao(raiz, { aoSair }) {
       <button class="btn" id="k-semfoto">${ico('semcamera')} Sem foto</button>
       <button class="btn" id="k-sair">${ico('sair')} ${sessao.perfil === 'admin' ? 'Painel' : 'Sair'}</button>
     </div>
-    <div class="balcao-corpo">
-      <div class="camera-area">
-        <video id="k-video" autoplay muted playsinline></video>
-        <canvas class="sobreposicao" id="k-over"></canvas>
-        <div class="camera-status" id="k-camstatus"></div>
-        <div class="camera-falha oculto" id="k-falha"><div>
-          <b>Câmera indisponível</b><span id="k-falha-msg"></span>
-          <p class="pequeno">Registros continuam possíveis, mas exigem justificativa.</p>
-          <button class="btn" id="k-tentar">${ico('atualizar')} Tentar novamente</button>
-          <button class="btn" id="k-camera2">${ico('camera')} Escolher câmera</button>
-        </div></div>
-        <div class="resultado-overlay oculto" id="k-resultado"></div>
-      </div>
-      <div class="painel-direito">
-        <div class="caixa-escura">
-          <div class="caixa erro-caixa oculto" id="k-modo-semfoto" style="margin-bottom:10px"></div>
-          <div class="mensagem-balcao" id="k-msg"></div>
-          <div class="modalidade-balcao oculto" id="k-tipos"></div>
-          <div class="cpf-visor" id="k-cpf" aria-live="polite"></div>
-          <div class="teclado" id="k-teclado">
-            ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button data-d="${n}">${n}</button>`).join('')}
-            <button class="apagar" data-a="apagar">⌫ Apagar</button><button data-d="0">0</button><button class="ok" data-a="ok">ENTER</button>
-          </div>
+    <div class="balcao-status"><span id="k-msg"></span><span class="caixa erro-caixa oculto" id="k-modo-semfoto"></span></div>
+    <div class="balcao-corpo-espelho">
+      <iframe id="k-espelho" src="tela-aluno.html?embed=1" title="Tela do aluno"></iframe>
+      <div class="camera-falha oculto" id="k-falha"><div>
+        <b>Câmera indisponível</b><span id="k-falha-msg"></span>
+        <p class="pequeno">Registros continuam possíveis, mas exigem justificativa.</p>
+        <button class="btn" id="k-tentar">${ico('atualizar')} Tentar novamente</button>
+        <button class="btn" id="k-camera2">${ico('camera')} Escolher câmera</button>
+      </div></div>
+      <div class="teclado-pop oculto" id="k-tecpop">
+        <div class="cpf-visor" id="k-cpf" aria-live="polite"></div>
+        <div class="teclado" id="k-teclado">
+          ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button data-d="${n}">${n}</button>`).join('')}
+          <button class="apagar" data-a="apagar">⌫</button><button data-d="0">0</button><button class="ok" data-a="ok">ENTER</button>
         </div>
-        <div class="caixa-escura ultimos"><h3 style="margin-bottom:8px">Registros de hoje</h3><ul id="k-ultimos"></ul></div>
+        <button class="btn fantasma pequeno" data-a="esc" style="width:100%;justify-content:center;margin-top:6px">ESC · cancelar</button>
       </div>
     </div>
+    <video id="k-video" class="video-oculto" muted playsinline></video>
   </div>`;
 
-  const video = $('#k-video', raiz), over = $('#k-over', raiz);
+  const video = $('#k-video', raiz);
 
   // ---------------------------------------------------------------- dados
   async function carregarDados() {
@@ -176,7 +169,6 @@ export function montarBalcao(raiz, { aoSair }) {
   // ---------------------------------------------------------------- câmera e rosto
   async function iniciarCamera() {
     pararCamera(S.stream); S.camOk = false;
-    video.classList.toggle('espelho', preferencias.espelhar); over.classList.toggle('espelho', preferencias.espelhar);
     try {
       S.stream = await abrirCamera(video);
       S.camOk = true; $('#k-falha', raiz).classList.add('oculto');
@@ -200,72 +192,67 @@ export function montarBalcao(raiz, { aoSair }) {
       console.warn('face', e);
     }
   }
+  /*
+   * Reconhecimento sob demanda: a câmera fica ligada, mas só analisa depois que o aluno aperta ENTER.
+   * Junta vários quadros do rosto dentro da moldura, compara a MÉDIA deles com as referências e só aceita
+   * quando o aluno está perto o bastante E claramente mais perto que o 2º mais parecido. Depois o aluno confirma com ENTER.
+   */
+  const CAPTURA_MS = 9000;
   async function ciclo() {
     if (S.parado) return;
     const t0 = performance.now();
     try {
-      if (S.faceOk && S.camOk && S.config.reconhecimento?.ativo && ['aguardando', 'naoreconhecido', 'cpf'].includes(S.estado) && !document.hidden && cameraAtiva(video)) {
-        const { rosto, quantidade, foraMoldura } = await detectarAoVivo(video);
+      if (['capturando', 'confirmar'].includes(S.estado) && S.faceOk && S.camOk && !document.hidden && cameraAtiva(video)) {
+        const M = molduraVideo(video.videoWidth, video.videoHeight);
+        const { rosto, quantidade, foraMoldura } = await detectarAoVivo(video, M);
         S.foraMoldura = !!foraMoldura;
         if (rosto) S.ultimoRosto = { desc: Array.from(rosto.descriptor, (v) => Math.round(v * 1e6) / 1e6), largura: rosto.detection.box.width, quantidade, t: Date.now() };
-        if (S.estado === 'cpf') desenharRosto(rosto && rosto.detection.box.width >= (video.videoWidth || 1) * 0.11 ? rosto : null);
-        else processarRosto(rosto);
-      } else if (!['confirmar'].includes(S.estado)) desenharRosto(null);
+        if (S.estado === 'capturando') processarCaptura(rosto);
+        else mostrarRosto(rosto, '#35d05a');
+      }
     } catch (e) { console.warn(e); }
-    // em computadores sem placa de vídeo a detecção é lenta: deixa o navegador livre metade do tempo
     const dt = performance.now() - t0;
-    S.timers.loop = setTimeout(ciclo, Math.max(150, 330 - dt, dt));
+    S.timers.loop = setTimeout(ciclo, ['capturando', 'confirmar'].includes(S.estado) ? Math.max(60, dt * 0.5) : 200);
   }
-  function processarRosto(rosto) {
-    const vw = video.videoWidth || 1;
-    // ignora rostos pequenos (pessoas ao fundo, na fila)
-    if (rosto && rosto.detection.box.width < vw * 0.11) rosto = null;
-    if (!rosto) {
-      desenharRosto(null); S.seq = 0; S.cand = null; S.semMatch = 0; S.buf = [];
-      if (S.estado === 'naoreconhecido' && Date.now() - S.naoRecEm > 5000) definirEstado('aguardando');
-      return;
-    }
-    // média dos últimos quadros do mesmo rosto (se o rosto "pulou" de lugar, recomeça)
+  function iniciarCaptura() {
+    if (!S.config.reconhecimento?.ativo || !S.faceOk) { mensagem('Reconhecimento facial desligado ou indisponível', 'Digite o CPF.'); return; }
+    if (!S.camOk) { mensagem('Câmera indisponível', 'Digite o CPF.'); return; }
+    if (!S.rec.tamanho) { mensagem('Nenhuma referência facial cadastrada', 'Digite o CPF.'); return; }
+    S.cap = { inicio: Date.now(), descs: [], cx: null, viuRosto: false, seq: 0, cand: null };
+    definirEstado('capturando');
+  }
+  function processarCaptura(rosto) {
+    const c = S.cap; if (!c) return;
+    if (Date.now() - c.inicio > CAPTURA_MS) return naoReconhecido(c.viuRosto ? 'Rosto não reconhecido. A foto de hoje será usada para reconhecer você nos próximos dias.' : 'Nenhum rosto encontrado dentro da moldura.');
+    if (!rosto) { mostrarRosto(null); return; }
+    c.viuRosto = true;
     const b = rosto.detection.box, cx = b.x + b.width / 2;
-    if (!S.buf || !S.bufCx || Math.abs(cx - S.bufCx) > b.width * 0.35) S.buf = [];
-    S.bufCx = cx; S.buf.push(rosto.descriptor); if (S.buf.length > 5) S.buf.shift();
-    const desc = S.buf.length >= 2 ? descritorMedio(S.buf) : rosto.descriptor;
-    const lim = Number(S.config.reconhecimento.limiar ?? 0.55);
-    const m = S.rec.tamanho ? S.rec.melhor(desc) : null;
-    // aceita quando está perto o bastante E claramente mais perto que o 2º aluno mais parecido;
-    // com distância um pouco acima do rigor, só aceita se a diferença para o 2º for grande
+    if (c.cx !== null && Math.abs(cx - c.cx) > b.width * 0.35) { c.descs = []; c.seq = 0; c.cand = null; }   // outra pessoa entrou na moldura
+    c.cx = cx; c.descs.push(rosto.descriptor); if (c.descs.length > 6) c.descs.shift();
+    if (c.descs.length < 2) { mostrarRosto(rosto, '#ffffff'); return; }
+    const desc = descritorMedio(c.descs);
+    const lim = Number(S.config.reconhecimento.limiar ?? 0.5);
+    const m = S.rec.melhor(desc);
     const margem = m ? m.segundo - m.distancia : 0;
-    const bateu = m && S.alunos.has(m.aluno) && !(S.ignorar.get(m.aluno) > Date.now())
-      && ((m.distancia <= lim && margem >= 0.05) || (m.distancia <= lim + 0.05 && margem >= 0.12));
+    const bateu = m && S.alunos.has(m.aluno) && m.distancia <= lim && margem >= 0.06;
     if (bateu) {
-      S.seq = S.cand === m.aluno ? S.seq + 1 : 1; S.cand = m.aluno; S.semMatch = 0;
-      desenharRosto(rosto, '#35d05a');
-      if (S.seq >= (S.config.reconhecimento.quadros || 3)) { S.descAceito = Array.from(desc, (v) => Math.round(v * 1e6) / 1e6); reconhecido(S.alunos.get(m.aluno), m.distancia); }
-      else tela({ tipo: 'estado', estado: 'analisando' });
+      c.seq = c.cand === m.aluno ? c.seq + 1 : 1; c.cand = m.aluno;
+      mostrarRosto(rosto, '#35d05a');
+      if (c.seq >= Math.max(2, (S.config.reconhecimento.quadros || 3) - 1)) { S.cap = null; reconhecido(S.alunos.get(m.aluno), m.distancia); }
     } else {
-      S.cand = null; S.seq = 0; S.semMatch++;
-      desenharRosto(rosto, S.semMatch >= 7 ? '#f2b33d' : '#ffffff');
-      if (S.semMatch === 7 && S.estado === 'aguardando') { S.naoRecEm = Date.now(); definirEstado('naoreconhecido'); }
-      else if (S.estado === 'aguardando') tela({ tipo: 'estado', estado: 'analisando' });
-      if (S.estado === 'naoreconhecido') S.naoRecEm = Date.now();
+      c.seq = 0; c.cand = null; mostrarRosto(rosto, '#ffffff');
+      if (c.descs.length >= 6 && Date.now() - c.inicio > 4500) naoReconhecido('Rosto não reconhecido. A foto de hoje será usada para reconhecer você nos próximos dias.');
     }
   }
-  function desenharRosto(rosto, cor = '#fff') {
-    const cw = over.clientWidth, ch = over.clientHeight;
-    if (over.width !== cw) over.width = cw; if (over.height !== ch) over.height = ch;
-    const g = over.getContext('2d'); g.clearRect(0, 0, cw, ch);
-    const vw = video.videoWidth, vh = video.videoHeight, s = Math.min(cw / vw, ch / vh);
-    if (vw) {
-      // moldura oval: o aluno encaixa o rosto aqui; rostos fora dela (fila) são ignorados
-      g.save(); g.setLineDash([14, 10]); g.lineWidth = 3;
-      g.strokeStyle = rosto ? 'rgba(53,208,90,.9)' : S.foraMoldura ? 'rgba(242,179,61,.95)' : 'rgba(255,255,255,.75)';
-      g.beginPath(); g.ellipse(cw / 2, ch / 2, vw * s * MOLDURA.rx, vh * s * MOLDURA.ry, 0, 0, Math.PI * 2); g.stroke(); g.restore();
-    }
+  function naoReconhecido(motivo) {
+    S.cap = null; mostrarRosto(null);
+    definirEstado('naoreconhecido', { tela: { motivo } });
+    S.confirmarTimer = setTimeout(() => { if (S.estado === 'naoreconhecido') definirEstado('aguardando'); }, 12000);
+  }
+  function mostrarRosto(rosto, cor = '#fff') {
+    const vw = video.videoWidth || 1, vh = video.videoHeight || 1;
     if (!rosto) { tela({ tipo: 'rosto', box: null, foraMoldura: S.foraMoldura }); return; }
-    const ox = (cw - vw * s) / 2, oy = (ch - vh * s) / 2, b = rosto.detection.box;
-    g.strokeStyle = cor; g.lineWidth = 4; g.beginPath();
-    g.roundRect ? g.roundRect(ox + b.x * s, oy + b.y * s, b.width * s, b.height * s, 12) : g.rect(ox + b.x * s, oy + b.y * s, b.width * s, b.height * s);
-    g.stroke();
+    const b = rosto.detection.box;
     tela({ tipo: 'rosto', box: { x: b.x / vw, y: b.y / vh, w: b.width / vw, h: b.height / vh }, cor });
   }
 
@@ -281,19 +268,21 @@ export function montarBalcao(raiz, { aoSair }) {
     S.estado = est; clearTimeout(S.confirmarTimer);
     if (est !== 'confirmar') S.tipoSel = null;
     mostrarTipos(est === 'confirmar');
+    if (est !== 'capturando' && est !== 'confirmar') mostrarRosto(null);
     if (est === 'aguardando') {
-      S.cpf = ''; S.candidato = null; desenharCpf();
-      mensagem(S.faceOk && S.camOk ? 'Encaixe o rosto na moldura ou digite o CPF' : 'Digite o CPF e pressione ENTER',
-        S.faceOk && S.camOk ? 'Só vale o rosto dentro da moldura: quem está atrás, na fila, é ignorado.' : '');
+      S.cpf = ''; S.candidato = null; S.cap = null; desenharCpf();
+      mensagem(S.faceOk && S.camOk ? 'Aguardando: ENTER inicia o reconhecimento facial · ou digite o CPF' : 'Aguardando: digite o CPF');
+    } else if (est === 'capturando') {
+      mensagem('Reconhecimento facial em andamento…', 'O aluno deve encaixar o rosto na moldura. ESC cancela.');
     } else if (est === 'naoreconhecido') {
       mensagem('Rosto não reconhecido', 'Peça ao aluno para digitar o CPF. A foto de hoje passará a ser a referência dele.');
     } else if (est === 'confirmar') {
       const a = extra.aluno;
-      mensagem(`${a.n}`, `${a.m || ''} · ${a.c || ''} · semelhança ${semelhanca(extra.distancia)}% · ENTER confirma · ESC se não for ele(a)`);
-      S.confirmarTimer = setTimeout(() => { if (S.estado === 'confirmar') { S.ignorar.set(a.id, Date.now() + 8000); definirEstado('aguardando'); } }, 20000);
+      mensagem(`${a.n} · ${a.m || ''} · ${TIPO[S.tipoSel]}`, `${extra.distancia != null ? `semelhança ${semelhanca(extra.distancia)}% · ` : 'pelo CPF · '}ENTER confirma · ESC se não for ele(a)`);
+      S.confirmarTimer = setTimeout(() => { if (S.estado === 'confirmar') definirEstado('aguardando'); }, 25000);
     } else if (est === 'cpf') {
-      mensagem('Digitando CPF…', 'ENTER confirma · ⌫ apaga · ESC ou "-" cancela');
-    } else if (est === 'processando') mensagem('Registrando…');
+      mensagem('Digitando CPF…', 'Ao digitar o 11º número, os dados do aluno aparecem · ⌫ apaga · ESC cancela');
+    } else if (est === 'processando') mensagem(extra.tela?.nome ? 'Registrando…' : 'Conferindo o CPF…');
     tela({ tipo: 'estado', estado: est, ...extra.tela });
   }
   function desenharCpf() {
@@ -303,19 +292,19 @@ export function montarBalcao(raiz, { aoSair }) {
       if (i === 3 || i === 6) s += '.'; if (i === 9) s += '-';
       s += i < d.length ? (i === d.length - 1 && mostrarUltimo ? d[i] : '•') : '_';
     }
-    $('#k-cpf', raiz).textContent = d.length ? s : '';
+    $('#k-cpf', raiz).textContent = d.length ? s : 'CPF';
     tela({ tipo: 'cpf', texto: d.length ? s : '' });
   }
 
   async function reconhecido(aluno, distancia) {
     S.candidato = { aluno, distancia };
     S.candidato = { aluno, distancia, metodo: 'facial' };
-    if (S.hoje.has(aluno.id)) { S.ignorar.set(aluno.id, Date.now() + 20000); return resultado('duplicado', { aluno, hora: S.hoje.get(aluno.id), tipo: S.hojeTipo.get(aluno.id) }); }
+    if (S.hoje.has(aluno.id)) return resultado('duplicado', { aluno, hora: S.hoje.get(aluno.id), tipo: S.hojeTipo.get(aluno.id) });
+    if (!aluno.at) return resultado('inativo', { aluno });
     const fotoCad = await fotoRapida(aluno.fb || aluno.fs);
-    if (S.estado !== 'aguardando' && S.estado !== 'naoreconhecido') return;
+    if (S.estado !== 'capturando') return;
     S.fotoCand = fotoCad;
     S.tipoSel = modalidadeDe(aluno);
-    if (S.config.reconhecimento.confirmar === false) return registrar(aluno, 'facial', distancia, S.tipoSel);
     definirEstado('confirmar', { aluno, distancia, tela: telaEscolha(aluno, fotoCad, distancia) });
   }
   const modalidadeDe = (aluno) => (aluno.md === 'lanche' ? 'lanche' : 'refeicao');
@@ -337,13 +326,13 @@ export function montarBalcao(raiz, { aoSair }) {
 
   // ---------------------------------------------------------------- teclado
   function digito(d) {
-    if (S.estado === 'processando') return;
-    if (S.estado === 'confirmar') return;
+    if (S.estado === 'processando' || S.estado === 'confirmar') return;
     if (S.estado === 'resultado') fecharResultado();
     if (S.cpf.length >= 11) return;
-    if (S.estado !== 'cpf') definirEstado('cpf');
+    if (S.estado !== 'cpf') { S.cap = null; definirEstado('cpf'); }
     S.cpf += d; S.ultimoDigitoEm = Date.now(); desenharCpf();
     setTimeout(desenharCpf, 950);
+    if (S.cpf.length === 11) setTimeout(buscarCpf, 150);   // CPF completo: busca sozinho, sem precisar de ENTER
   }
   function apagar() {
     if (S.estado !== 'cpf') return;
@@ -351,11 +340,17 @@ export function montarBalcao(raiz, { aoSair }) {
     if (!S.cpf) definirEstado('aguardando');
   }
   async function enter() {
-    if (S.estado === 'resultado') return fecharResultado();
+    if (S.estado === 'resultado') { fecharResultado(); return; }
     if (S.estado === 'confirmar' && S.candidato) return confirmarEscolha();
-    if (S.estado !== 'cpf') return;
+    if (S.estado === 'aguardando' || S.estado === 'naoreconhecido') return iniciarCaptura();
+    if (S.estado === 'cpf') {
+      if (S.cpf.length < 11) { mensagem('CPF incompleto', 'Digite os 11 números do CPF.'); return; }
+      return buscarCpf();
+    }
+  }
+  async function buscarCpf() {
+    if (S.estado !== 'cpf' || S.cpf.length !== 11) return;
     const cpf = S.cpf;
-    if (cpf.length < 11) { mensagem('CPF incompleto', 'Digite os 11 números do CPF.'); return; }
     if (!cpfValido(cpf)) return resultado('cpf_invalido', {});
     definirEstado('processando');
     let aluno = null;
@@ -374,17 +369,17 @@ export function montarBalcao(raiz, { aoSair }) {
       if (lista.length > 1) return resultado('erro', { msg: 'Sem internet não foi possível confirmar este CPF. Anote o nome do aluno para registro manual.' });
       aluno = lista[0];
     }
-    if (S.hoje.has(aluno.id)) { S.ignorar.set(aluno.id, Date.now() + 20000); return resultado('duplicado', { aluno, hora: S.hoje.get(aluno.id), tipo: S.hojeTipo.get(aluno.id) }); }
+    if (S.hoje.has(aluno.id)) return resultado('duplicado', { aluno, hora: S.hoje.get(aluno.id), tipo: S.hojeTipo.get(aluno.id) });
     if (!aluno.at) return resultado('inativo', { aluno });
     S.cpf = ''; desenharCpf();
     S.candidato = { aluno, distancia: null, metodo: 'cpf' };
-    S.estado = 'identificado';   // libera o registrar (o estado 'processando' bloqueia chamadas repetidas)
-    registrar(aluno, 'cpf', null, modalidadeDe(aluno));
+    S.fotoCand = await fotoRapida(aluno.fb || aluno.fs);
+    S.tipoSel = modalidadeDe(aluno);
+    definirEstado('confirmar', { aluno, distancia: null, tela: telaEscolha(aluno, S.fotoCand) });
   }
   function cancelar() {
     if (S.estado === 'resultado') return fecharResultado();
-    if (S.estado === 'confirmar' && S.candidato) S.ignorar.set(S.candidato.aluno.id, Date.now() + 8000);
-    S.candidato = null; S.descAceito = null;
+    S.candidato = null; S.cap = null;
     if (S.estado !== 'processando') definirEstado('aguardando');
   }
   function teclaVirtual(k) {
@@ -486,11 +481,7 @@ export function montarBalcao(raiz, { aoSair }) {
 
     // aprendizado: rosto reconhecido e confirmado pelo aluno vira nova referência (até 3 do balcão por aluno),
     // o que aproxima as referências da câmera e da luz do refeitório; só quando ainda não é quase idêntico às existentes
-    let confirmada = false;
-    if (cap && metodo === 'facial' && S.descAceito && distancia != null && distancia > 0.3 && (aluno.nw || 0) < 3) {
-      descritor = S.descAceito; confirmada = true;
-    }
-    S.descAceito = null;
+    const confirmada = false;   // referências novas só pelo CPF (identidade certa); o reconhecimento facial não "aprende" sozinho
 
     const agora = relogio.agora();
     const it = {
@@ -595,11 +586,8 @@ export function montarBalcao(raiz, { aoSair }) {
     const fotosHtml = tipo === 'ok' ? `<div class="fotos-par">
         <div class="foto-box">${fotoCad ? `<img src="${fotoCad}" alt="">` : 'Sem foto de cadastro'}<span class="rotulo">Cadastro</span></div>
         <div class="foto-box ${d.fotoAgora ? '' : 'sem'}">${d.fotoAgora ? `<img src="${d.fotoAgora}" alt="">` : 'SEM FOTO'}<span class="rotulo">Agora</span></div></div>` : '';
-    const box = $('#k-resultado', raiz);
-    box.innerHTML = `<div class="resultado-cartao ${T.classe}"><div class="icone">${ico(T.icone)}</div><h2>${T.titulo}</h2><p>${T.texto}</p>${fotosHtml}
-      <p class="pequeno mudo" style="margin-top:14px">ENTER ou qualquer número para continuar</p></div>`;
-    box.classList.remove('oculto');
-    mensagem(T.titulo);
+    void fotosHtml;
+    mensagem(T.titulo, (T.texto || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() + ' · ENTER ou qualquer número continua');
     tela({ tipo: 'resultado', status: tipo, classe: T.classe, titulo: T.titulo, nome: a?.n, matricula: a?.m, curso: a?.c, hora: d.hora, tipoReg: d.tipo,
       dentro: d.dentro, semFoto: d.semFoto, offline: d.offline, fotoCadastro: fotoCad, fotoAgora: d.fotoAgora,
       inicio: S.config.horario_inicio, fim: S.config.horario_fim });
@@ -607,16 +595,16 @@ export function montarBalcao(raiz, { aoSair }) {
   }
   function fecharResultado() {
     clearTimeout(S.resultadoTimer);
-    $('#k-resultado', raiz).classList.add('oculto');
     if (S.estado === 'resultado') definirEstado('aguardando');
   }
 
-  function desenharUltimos() {
-    const ul = $('#k-ultimos', raiz); if (!ul) return;
-    ul.innerHTML = S.ultimos.slice(0, 60).map((u) => `<li class="${u.semFoto ? 'sem-foto' : ''}"><span class="hora">${esc(u.h)}</span>
-      <span class="nome">${esc(u.nome)}</span>${u.t === 'lanche' ? '<span class="selo azul">lanche</span>' : ''}${u.semFoto ? '<span class="selo vermelho">sem foto</span>' : ''}${u.fora ? '<span class="selo ambar">fora</span>' : ''}${u.offline ? '<span class="selo">fila</span>' : ''}</li>`).join('')
-      || '<li class="mudo">Nenhum registro ainda.</li>';
+  function desenharUltimos() { atualizarTopo(); }
+  function verHoje() {
+    modal({ titulo: `Registros de hoje (${S.hoje.size})`, corpo: `<ul class="lista-hoje">${S.ultimos.slice(0, 200).map((u) => `<li class="${u.semFoto ? 'sem-foto' : ''}"><span class="hora">${esc(u.h)}</span>
+      <span class="nome">${esc(u.nome)}</span>${u.t === 'lanche' ? '<span class="selo azul">lanche</span>' : '<span class="selo verde">refeição</span>'}${u.semFoto ? '<span class="selo vermelho">sem foto</span>' : ''}${u.fora ? '<span class="selo ambar">fora</span>' : ''}${u.offline ? '<span class="selo">fila</span>' : ''}</li>`).join('')
+      || '<li class="mudo">Nenhum registro ainda.</li>'}</ul>`, botoes: [{ texto: 'Fechar' }] });
   }
+
 
   function atualizarModoSemFoto() {
     const el = $('#k-modo-semfoto', raiz);
@@ -641,17 +629,22 @@ export function montarBalcao(raiz, { aoSair }) {
     // teclas digitadas com a janela do aluno em foco (teclado numérico na frente do aluno)
     if (e.data?.tipo === 'tecla') { teclaVirtual(e.data.k); return; }
     if (e.data?.tipo === 'ola') {
-      tela({ tipo: 'config', camera: preferencias.camera, espelhar: preferencias.espelhar });
+      tela({ tipo: 'config', camera: preferencias.camera, espelhar: preferencias.espelhar, zoom: preferencias.zoom, moldura: preferencias.moldura });
       atualizarTopo(); tela({ tipo: 'camera', ok: S.camOk }); tela({ tipo: 'estado', estado: S.estado });
     }
   };
 
   // ---------------------------------------------------------------- eventos
-  $('#k-teclado', raiz).addEventListener('click', (e) => {
+  $('#k-tecpop', raiz).addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.d) digito(b.dataset.d); else if (b.dataset.a === 'apagar') apagar(); else if (b.dataset.a === 'ok') enter();
+    if (b.dataset.d) digito(b.dataset.d); else if (b.dataset.a === 'apagar') apagar(); else if (b.dataset.a === 'ok') enter(); else if (b.dataset.a === 'esc') cancelar();
     b.blur();
   });
+  // teclado numérico na tela: janela flutuante, aberta ou fechada pelo botão Teclado (fica lembrado neste computador)
+  const tecAberto = (v) => { $('#k-tecpop', raiz).classList.toggle('oculto', !v); $('#k-tec', raiz).classList.toggle('ativo', v); try { localStorage.setItem('pases_teclado', v ? '1' : '0'); } catch { /* */ } };
+  tecAberto((() => { try { return localStorage.getItem('pases_teclado') === '1'; } catch { return false; } })());
+  $('#k-tec', raiz).onclick = () => tecAberto($('#k-tecpop', raiz).classList.contains('oculto'));
+  $('#k-total', raiz).onclick = verHoje;
   $('#k-tela', raiz).onclick = abrirTelaAluno;
   $('#k-rede', raiz).onclick = () => verificarConexao(true);
   $('#k-troca', raiz).onclick = solicitarTroca;
@@ -699,19 +692,31 @@ export function montarBalcao(raiz, { aoSair }) {
   $('#k-camera', raiz).onclick = escolherCamera; $('#k-camera2', raiz).onclick = escolherCamera;
   async function escolherCamera() {
     const cams = await listarCameras().catch(() => []);
+    const cfg = () => tela({ tipo: 'config', camera: preferencias.camera, espelhar: preferencias.espelhar, zoom: preferencias.zoom, moldura: preferencias.moldura });
+    const antes = { zoom: preferencias.zoom, moldura: preferencias.moldura };
+    tela({ tipo: 'previa', on: true });
     const m = modal({
       titulo: 'Câmera deste computador',
-      corpo: `<p class="mudo" style="margin:0">Escolha a webcam USB apontada para o aluno. A escolha fica salva neste computador.</p>
+      corpo: `<p class="mudo" style="margin:0">Escolha a webcam USB apontada para o aluno e ajuste o enquadramento olhando a imagem atrás desta janela (ou na tela do aluno). Fica salvo neste computador.</p>
         <label class="campo"><span>Webcam</span><select data-c><option value="">Padrão do sistema</option>${cams.map((c, i) => `<option value="${esc(c.deviceId)}" ${c.deviceId === preferencias.camera ? 'selected' : ''}>${esc(c.label || `Câmera ${i + 1}`)}</option>`).join('')}</select></label>
-        <label class="check"><input type="checkbox" data-e ${preferencias.espelhar ? 'checked' : ''}> Espelhar a imagem (como um espelho)</label>`,
-      botoes: [{ texto: 'Cancelar' }, { texto: 'Salvar câmera', classe: 'primario', acao: async (fechar, el) => {
+        <label class="check"><input type="checkbox" data-e ${preferencias.espelhar ? 'checked' : ''}> Espelhar a imagem (como um espelho)</label>
+        <label class="campo"><span>Zoom da imagem: <b data-zv>${preferencias.zoom.toFixed(2)}×</b> (menor = afasta, o rosto fica menor na moldura)</span>
+          <input type="range" data-z min="0.5" max="2.5" step="0.05" value="${preferencias.zoom}"></label>
+        <label class="campo"><span>Tamanho da moldura: <b data-mv>${Math.round(preferencias.moldura * 100)}%</b></span>
+          <input type="range" data-m min="0.7" max="1.3" step="0.05" value="${preferencias.moldura}"></label>`,
+      aoAbrir: (el) => {
+        $('[data-z]', el).oninput = (e) => { preferencias.salvar({ zoom: Number(e.target.value) }); $('[data-zv]', el).textContent = `${Number(e.target.value).toFixed(2)}×`; cfg(); };
+        $('[data-m]', el).oninput = (e) => { preferencias.salvar({ moldura: Number(e.target.value) }); $('[data-mv]', el).textContent = `${Math.round(e.target.value * 100)}%`; cfg(); };
+      },
+      botoes: [{ texto: 'Cancelar', acao: (fechar) => { preferencias.salvar(antes); cfg(); fechar(); return false; } },
+        { texto: 'Salvar câmera', classe: 'primario', acao: async (fechar, el) => {
         const sel = $('[data-c]', el);
         preferencias.salvar({ camera: sel.value, rotulo: sel.value ? sel.selectedOptions[0].textContent : '', espelhar: $('[data-e]', el).checked });
-        fechar(); await iniciarCamera();
-        tela({ tipo: 'config', camera: preferencias.camera, espelhar: preferencias.espelhar });
+        fechar(); await iniciarCamera(); cfg();
         aviso('Câmera salva.', 'ok'); return false;
       } }]
     });
+    m.promessa.finally(() => tela({ tipo: 'previa', on: false }));
     return m;
   }
   $('#k-tentar', raiz).onclick = iniciarCamera;
