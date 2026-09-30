@@ -274,3 +274,20 @@ button.pilula.clicavel:hover { filter: brightness(1.2); }
 .pilula.verificando svg { animation: gira .8s linear infinite; }
 @keyframes gira { to { transform: rotate(360deg); } }
 .tabela td.sel, .tabela th.sel { width: 28px; text-align: center; }
+/* v1.6: balcão espelha a tela do aluno; teclado numérico em janela flutuante */
+.balcao.balcao-espelho { display: flex; flex-direction: column; height: 100vh; }
+.balcao-status { display: flex; align-items: center; gap: 12px; padding: 6px 16px; min-height: 34px; background: #111a15; border-bottom: 1px solid #26312b; color: #cfe0d7; font-size: 14px; }
+.balcao-status small { color: #a9b8b0; margin-left: 8px; }
+.balcao-status .caixa { margin: 0 0 0 auto; padding: 4px 10px; }
+.balcao-corpo-espelho { position: relative; flex: 1; min-height: 0; }
+.balcao-corpo-espelho iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #0c120f; }
+.balcao-corpo-espelho .camera-falha { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5; }
+.video-oculto { position: fixed; right: 0; bottom: 0; width: 4px; height: 4px; opacity: 0.01; pointer-events: none; }
+.teclado-pop { position: absolute; right: 18px; bottom: 18px; z-index: 6; width: 300px; background: #151d19; border: 1px solid #36443d; border-radius: 16px; padding: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+.teclado-pop .cpf-visor { margin-bottom: 8px; min-height: 44px; }
+.teclado-pop .teclado button { padding: 12px 0; font-size: 22px; }
+.balcao .btn.ativo { background: #2f9e41; color: #fff; border-color: #2f9e41; }
+.lista-hoje { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow: auto; }
+.lista-hoje li { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--linha, #e3e8e5); }
+.lista-hoje .hora { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 48px; }
+.lista-hoje .nome { flex: 1; }
