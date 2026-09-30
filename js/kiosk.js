@@ -283,7 +283,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     if (bateu) {
       c.seq = c.cand === m.aluno ? c.seq + 1 : 1; c.cand = m.aluno;
       mostrarRosto(rosto, '#35d05a');
-      if (c.seq >= Math.max(2, (S.config.reconhecimento.quadros || 3) - 1)) { S.cap = null; reconhecido(S.alunos.get(m.aluno), m.distancia); }
+      if (c.seq >= Math.max(2, (S.config.reconhecimento.quadros || 3) - 1)) { S.cap = null; S.descFacial = Array.from(desc, (v) => Math.round(v * 1e6) / 1e6); reconhecido(S.alunos.get(m.aluno), m.distancia); }
     } else {
       c.seq = 0; c.cand = null; mostrarRosto(rosto, '#ffffff');
       if (c.descs.length >= 6 && Date.now() - c.inicio > 4500) naoReconhecido('Rosto não reconhecido. A foto de hoje será usada para reconhecer você nos próximos dias.');
@@ -315,7 +315,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     mostrarTipos(est === 'confirmar');
     if (est !== 'capturando' && est !== 'confirmar') mostrarRosto(null);
     if (est === 'aguardando') {
-      S.cpf = ''; S.candidato = null; S.cap = null; desenharCpf();
+      S.cpf = ''; S.candidato = null; S.cap = null; S.descFacial = null; desenharCpf();
       mensagem(S.faceOk && S.camOk ? 'Aguardando: ENTER inicia o reconhecimento facial · ou digite o CPF' : 'Aguardando: digite o CPF');
     } else if (est === 'capturando') {
       mensagem('Reconhecimento facial em andamento…', 'O aluno deve encaixar o rosto na moldura. ESC cancela.');
@@ -426,7 +426,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
   }
   function cancelar() {
     if (S.estado === 'resultado') return fecharResultado();
-    S.candidato = null; S.cap = null;
+    S.candidato = null; S.cap = null; S.descFacial = null;
     if (S.estado !== 'processando') definirEstado('aguardando');
   }
   function teclaVirtual(k) {
@@ -507,15 +507,21 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
       justificativa = await pedirJustificativa();
       if (!justificativa) { definirEstado('aguardando'); return; }
     }
-    // Foto base: quando o aluno se identificou pelo CPF, o rosto de hoje vira referência para os próximos dias.
-    if (cap && metodo === 'cpf' && S.faceOk && S.config.reconhecimento?.ativo) {
+    // Última foto da webcam: a cada registro com foto (pelo rosto ou pelo CPF), o rosto de hoje passa a ser a referência
+    // de webcam do aluno, substituindo a anterior. O balcão compara sempre com a foto do SUAP e com essa última foto.
+    if (cap && S.faceOk && S.config.reconhecimento?.ativo) {
       try {
-        // usa o rosto detectado ao vivo nos últimos 2 s (rápido); senão, analisa a foto capturada
-        const u = S.ultimoRosto;
-        const r = u && Date.now() - u.t < 2000 && u.largura >= (video.videoWidth || 1) * 0.11
-          ? { descritor: u.desc, quantidade: u.quantidade }
-          : await Promise.race([descritorDeImagem(cap.canvas, { minimoLargura: 70 }), new Promise((ok) => setTimeout(() => ok(null), 3000))]);   // nunca trava o registro
+        let r = null;
+        if (metodo === 'facial' && S.descFacial) r = { descritor: S.descFacial, quantidade: 1 };   // média dos quadros já aceita
+        else {
+          // pelo CPF: usa o rosto detectado ao vivo nos últimos 2 s; senão, analisa a foto capturada
+          const u = S.ultimoRosto;
+          r = u && Date.now() - u.t < 2000 && u.largura >= (video.videoWidth || 1) * 0.08
+            ? { descritor: u.desc, quantidade: u.quantidade }
+            : await Promise.race([descritorDeImagem(cap.canvas, { minimoLargura: 70 }), new Promise((ok) => setTimeout(() => ok(null), 3000))]);   // nunca trava o registro
+        }
         if (r && r.quantidade === 1) {
+          // segurança: se este rosto for claramente mais parecido com OUTRO aluno, não vira referência
           const outro = S.rec.tamanho ? S.rec.melhor(r.descritor) : null;
           const lim = Number(S.config.reconhecimento.limiar ?? 0.5);
           if (outro && outro.aluno !== aluno.id && outro.distancia <= lim - 0.05) {
@@ -525,10 +531,8 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
         }
       } catch (e) { console.warn('descritor', e); }
     }
-
-    // aprendizado: rosto reconhecido e confirmado pelo aluno vira nova referência (até 3 do balcão por aluno),
-    // o que aproxima as referências da câmera e da luz do refeitório; só quando ainda não é quase idêntico às existentes
-    const confirmada = false;   // referências novas só pelo CPF (identidade certa); o reconhecimento facial não "aprende" sozinho
+    S.descFacial = null;
+    const confirmada = !!descritor;   // identidade confirmada com ENTER: a referência já nasce válida
 
     const agora = relogio.agora();
     const it = {
@@ -551,13 +555,13 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
       } else await idb.del('fila', it.id);
     } finally { S.emEnvio.delete(it.id); }
     if (r.status === 'ok') {
-      if (descritor) { S.rec.itens.push({ a: aluno.id, d: Float32Array.from(descritor) }); aluno.nw = (aluno.nw || 0) + 1; }
+      if (descritor) { S.rec.itens = S.rec.itens.filter((x) => !(x.a === aluno.id && x.o === 'webcam')); S.rec.itens.push({ a: aluno.id, o: 'webcam', d: Float32Array.from(descritor) }); aluno.nw = 1; }
       const hora = r.hora || it.hora, dentro = tipo === 'lanche' ? true : (r.dentro_horario ?? dentroDoHorario(agora));
       S.hoje.set(aluno.id, hora); S.hojeTipo.set(aluno.id, tipo);
       S.ultimos.unshift({ a: aluno.id, h: hora, t: tipo, nome: aluno.n, semFoto: !it.foto, fora: !dentro, offline: !!r.local });
       desenharUltimos(); atualizarTopo();
       S.ignorar.set(aluno.id, Date.now() + 20000);
-      resultado('ok', { aluno, hora, dentro, tipo, fotoAgora: it.foto, semFoto: !it.foto, offline: !!r.local, novaBase: !!descritor && !confirmada, observacao });
+      resultado('ok', { aluno, hora, dentro, tipo, fotoAgora: it.foto, semFoto: !it.foto, offline: !!r.local, novaBase: !!descritor && metodo === 'cpf', observacao });
       setTimeout(sincronizar, 300);
     } else {
       if (r.status === 'duplicado') { S.hoje.set(aluno.id, r.hora); S.hojeTipo.set(aluno.id, r.tipo || 'refeicao'); }

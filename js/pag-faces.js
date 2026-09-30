@@ -6,7 +6,7 @@ import * as D from './dados.js';
 export async function render(el, { cabecalho }) {
   let lista = await api('faces_listar', { p_pendentes: true });
 
-  el.innerHTML = cabecalho('Validar rostos', 'Fotos do balcão (aluno que digitou o CPF) e novas fotos enviadas pelo operador na ficha do aluno. Confira se é a mesma pessoa da foto do SUAP.',
+  el.innerHTML = cabecalho('Validar rostos', 'Novas fotos de cadastro enviadas pelo operador na ficha do aluno. Confira se é a mesma pessoa da foto do SUAP. (A última foto do balcão de cada aluno vira referência automaticamente, depois que ele confirma a identidade com ENTER.)',
     `<button class="btn" id="f-todos">${ico('check')} Aprovar todos os exibidos</button>`) + `
     <div class="caixa info" style="margin-bottom:14px">As referências já funcionam enquanto aguardam validação. Rejeitar apaga a referência e impede que outra pessoa seja reconhecida com o nome deste aluno.</div>
     <div id="f-lista" class="cards-faces"></div>`;

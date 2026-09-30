@@ -102,7 +102,7 @@ export function imagemDeDataUrl(url) {
 /** Compara um descritor com todos os cadastrados. */
 export class Reconhecedor {
   constructor(faces = []) { this.carregar(faces); }
-  carregar(faces) { this.itens = faces.filter((f) => f.d?.length === 128).map((f) => ({ a: f.a, d: Float32Array.from(f.d) })); }
+  carregar(faces) { this.itens = faces.filter((f) => f.d?.length === 128).map((f) => ({ a: f.a, o: f.o, d: Float32Array.from(f.d) })); }
   get tamanho() { return this.itens.length; }
   melhor(desc) {
     const porAluno = new Map();
