@@ -44,7 +44,7 @@ export async function render(el, { cabecalho, perfil }) {
         <td><span class="selo ${a.modalidade === 'lanche' ? 'azul' : 'verde'}">${TIPO[a.modalidade || 'refeicao']}</span></td>
         <td class="pequeno">${esc(a.curso || '')}</td><td class="num pequeno">${a.cpf ? esc(admin ? fmtCpf(a.cpf) : a.cpf) : '<span class="selo vermelho-suave">sem CPF</span>'}</td>
         <td class="pequeno">${esc(a.situacao_suap || '')}</td>
-        <td>${fc.suap ? '<span class="selo verde">SUAP</span> ' : ''}${fc.manual ? '<span class="selo verde">cadastro</span> ' : ''}${fc.webcam ? `<span class="selo azul">balcão ×${fc.webcam}</span> ` : ''}${a.faces_pendentes ? '<span class="selo ambar">validar</span>' : ''}${!a.faces ? '<span class="selo">sem referência</span>' : ''}</td>
+        <td>${fc.suap ? '<span class="selo verde">SUAP</span> ' : ''}${fc.manual ? '<span class="selo verde">cadastro</span> ' : ''}${fc.webcam ? '<span class="selo azul">último registro</span> ' : ''}${a.faces_pendentes ? '<span class="selo ambar">validar</span>' : ''}${!a.faces ? '<span class="selo">sem referência</span>' : ''}</td>
         <td class="num">${a.total}</td><td class="pequeno">${a.ultima ? fmtData(a.ultima) : '<span class="mudo">nunca</span>'}</td></tr>`;
     }).join('') || '<tr><td colspan="8" class="vazio">Nenhum aluno encontrado.</td></tr>';
   }
@@ -58,7 +58,7 @@ export async function render(el, { cabecalho, perfil }) {
       <div class="fotos-par ficha-fotos">
         <div><div class="foto-box" data-fsuap>${a.foto_suap_id ? 'Carregando…' : 'Sem foto do SUAP'}<span class="rotulo">SUAP</span></div>
           ${admin && !novo && a.foto_suap_id ? `<div class="linha-flex" style="margin-top:8px"><button class="btn pequeno perigo" data-excsuap>${ico('lixo')} Excluir foto do SUAP</button></div>` : ''}</div>
-        <div><div class="foto-box" data-fbase>${a.foto_base_id ? 'Carregando…' : 'Sem foto de referência'}<span class="rotulo">Referência (webcam)</span></div>
+        <div><div class="foto-box" data-fbase>${a.foto_base_id ? 'Carregando…' : 'Sem foto de referência'}<span class="rotulo">Foto do cadastro</span></div>
           ${(admin || operador) && !novo && !a.cancelado_em ? `<div class="linha-flex" style="margin-top:8px"><button class="btn pequeno" data-cap>${ico('camera')} Capturar na webcam</button>
             ${admin ? `<label class="btn pequeno">${ico('enviar')} Enviar arquivo<input type="file" accept="image/*" data-arq hidden></label>` : ''}
             ${admin && a.foto_base_id ? `<button class="btn pequeno perigo" data-excbase>${ico('lixo')} Excluir foto de referência</button>` : ''}
@@ -116,7 +116,7 @@ export async function render(el, { cabecalho, perfil }) {
     });
     const el2 = m.el;
     const mostrar = async (sel, id, rot) => { const u = id ? await foto(id).catch(() => null) : null; const b = $(sel, el2); if (b && id) b.innerHTML = (u ? `<img src="${u}" alt="">` : 'Não foi possível carregar') + `<span class="rotulo">${rot}</span>`; };
-    mostrar('[data-fsuap]', a.foto_suap_id, 'SUAP'); mostrar('[data-fbase]', a.foto_base_id, 'Referência (webcam)');
+    mostrar('[data-fsuap]', a.foto_suap_id, 'SUAP'); mostrar('[data-fbase]', a.foto_base_id, 'Foto do cadastro');
     if (!novo) {
       api('refeicoes_listar', { p_ini: addDias(hojeISO(), -365), p_fim: hojeISO(), p_aluno_id: a.id }).then((rs) => {
         const pm = {}; rs.forEach((r) => { const k = r.dt.slice(0, 7); pm[k] = (pm[k] || 0) + 1; });
@@ -130,7 +130,7 @@ export async function render(el, { cabecalho, perfil }) {
     const boxBase = () => $('[data-fbase]', el2);
     const estadoBase = (dataUrl, selo) => {
       const b = boxBase(); if (!b) return;
-      b.innerHTML = `<img src="${dataUrl}" alt=""><span class="rotulo">Referência (webcam)</span>` +
+      b.innerHTML = `<img src="${dataUrl}" alt=""><span class="rotulo">Foto do cadastro</span>` +
         `<span class="selo ${selo.cor}" style="position:absolute;left:8px;bottom:8px">${selo.texto}</span>`;
     };
     const usarFoto = async (dataUrl, canvas) => {
@@ -171,7 +171,7 @@ export async function render(el, { cabecalho, perfil }) {
     };
     const es = $('[data-excsuap]', el2), eb = $('[data-excbase]', el2);
     if (es) es.onclick = () => exc('suap', `Excluir a foto do SUAP de ${esc(a.nome)}? As referências faciais geradas a partir dela também serão apagadas.`);
-    if (eb) eb.onclick = () => exc('base', `Excluir a foto de referência (webcam) de ${esc(a.nome)}? A referência facial dela também será apagada.`);
+    if (eb) eb.onclick = () => exc('base', `Excluir a foto do cadastro de ${esc(a.nome)}? A referência facial dela também será apagada.`);
     const ap = $('[data-apagaref]', el2);
     if (ap) ap.onclick = async () => {
       if (!(await confirmar('Apagar todas as referências faciais deste aluno? Ele precisará digitar o CPF no próximo almoço para criar uma nova.', { perigo: true, ok: 'Apagar' }))) return;

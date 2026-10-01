@@ -22,7 +22,7 @@ export async function render(el, { cabecalho }) {
     const pos = lista.findIndex((x) => x.id === f.id) + 1;
     const m = modal({
       titulo: `${f.nome} · ${pos} de ${lista.length}`, largo: true,
-      corpo: `<div class="fotos-par">${caixa(comp, rot)}${caixa(f.foto_id, f.origem === 'manual' ? 'Nova foto (operador)' : 'Balcão')}</div>
+      corpo: `<div class="fotos-par">${caixa(comp, rot)}${caixa(f.foto_id, f.origem === 'manual' ? (f.validada ? 'Cadastro' : 'Nova foto (operador)') : 'Último registro')}</div>
         <p class="mudo" style="margin:10px 0 0">${esc(f.matricula || '')} · ${esc(f.curso || '')} · capturada em ${fmtDataHora(f.criado_em)} · teclas: <b>S</b> mesma pessoa, <b>N</b> não é a mesma, <b>→</b> próxima</p>`,
       botoes: [
         { texto: 'Próxima →', acao: (fechar) => { fechar(); proxima(f.id, false); return false; } },
@@ -50,7 +50,7 @@ export async function render(el, { cabecalho }) {
     if (!lista.length) { box.innerHTML = '<div class="vazio" style="grid-column:1/-1">Nenhuma foto aguardando validação.</div>'; return; }
     box.innerHTML = lista.map((f) => `<div class="cartao" data-id="${f.id}" style="margin:0">
         <div class="fotos-par clicavel" data-abrir title="Clique para ampliar"><div class="foto-box" data-img="${esc(f.foto_suap_id || '')}">${f.foto_suap_id ? 'Carregando…' : 'Sem foto do SUAP'}<span class="rotulo">SUAP</span></div>
-          <div class="foto-box" data-img="${esc(f.foto_id || '')}">${f.foto_id ? 'Carregando…' : 'Foto não enviada'}<span class="rotulo">${f.origem === 'manual' ? 'Nova foto (operador)' : 'Balcão'}</span></div></div>
+          <div class="foto-box" data-img="${esc(f.foto_id || '')}">${f.foto_id ? 'Carregando…' : 'Foto não enviada'}<span class="rotulo">${f.origem === 'manual' ? (f.validada ? 'Cadastro' : 'Nova foto (operador)') : 'Último registro'}</span></div></div>
         <div style="margin:10px 0"><b>${esc(f.nome)}</b><br><small class="mudo">${esc(f.matricula || '')} · ${esc(f.curso || '')} · capturada em ${fmtDataHora(f.criado_em)}</small></div>
         <div class="linha-flex"><button class="btn primario pequeno" data-ok>${ico('check')} Mesma pessoa</button><button class="btn perigo pequeno" data-nao>${ico('x')} Não é a mesma</button><button class="btn pequeno" data-abrir>Ampliar</button></div></div>`).join('');
     const ids = lista.flatMap((f) => [f.foto_suap_id, f.foto_id]).filter(Boolean);

@@ -521,8 +521,8 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
       justificativa = await pedirJustificativa();
       if (!justificativa) { definirEstado('aguardando'); return; }
     }
-    // Última foto da webcam: a cada registro com foto (pelo rosto ou pelo CPF), o rosto de hoje passa a ser a referência
-    // de webcam do aluno, substituindo a anterior. O balcão compara sempre com a foto do SUAP e com essa última foto.
+    // Referências: o balcão compara com a foto do cadastro (SUAP e/ou foto de cadastro) e com o último registro.
+    // Reconhecido pelo rosto: a foto de hoje vira o "último registro". Pelo CPF: vira a nova foto do cadastro.
     if (cap && S.faceOk && S.config.reconhecimento?.ativo) {
       try {
         let r = null;
@@ -569,7 +569,12 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
       } else await idb.del('fila', it.id);
     } finally { S.emEnvio.delete(it.id); }
     if (r.status === 'ok') {
-      if (descritor) { S.rec.itens = S.rec.itens.filter((x) => !(x.a === aluno.id && x.o === 'webcam')); S.rec.itens.push({ a: aluno.id, o: 'webcam', d: Float32Array.from(descritor) }); aluno.nw = 1; }
+      if (descritor) {
+        // referências do aluno = cadastro (SUAP e/ou foto de cadastro) + último registro
+        const cad = metodo === 'cpf';
+        S.rec.itens = S.rec.itens.filter((x) => !(x.a === aluno.id && (x.o === 'webcam' || (cad && x.o === 'manual'))));
+        S.rec.itens.push({ a: aluno.id, o: cad ? 'manual' : 'webcam', d: Float32Array.from(descritor) }); aluno.nw = cad ? 0 : 1;
+      }
       const hora = r.hora || it.hora, dentro = tipo === 'lanche' ? true : (r.dentro_horario ?? dentroDoHorario(agora));
       S.hoje.set(aluno.id, hora); S.hojeTipo.set(aluno.id, tipo);
       S.ultimos.unshift({ a: aluno.id, h: hora, t: tipo, nome: aluno.n, semFoto: !it.foto, fora: !dentro, offline: !!r.local });
@@ -617,8 +622,10 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
             it.fotoAnexada = true; await idb.put('fila', it.id, it);
           }
           if (!it.faceFeita && (it.fotoId || it.tentativasFoto >= 3 || !gasConfigurado())) {
-            await api('salvar_face', { p_aluno_id: it.aluno_id, p_descriptor: it.descritor, p_origem: 'webcam', p_foto_id: it.fotoId, p_confirmada: !!it.confirmada });
-            const a = S.alunos.get(it.aluno_id); if (a && !a.fb && it.fotoId) a.fb = it.fotoId;
+            // pelo CPF a foto vira a do cadastro; pelo rosto ela é só o "último registro" (o cadastro fica como está)
+            const cad = it.metodo === 'cpf';
+            await api('salvar_face', { p_aluno_id: it.aluno_id, p_descriptor: it.descritor, p_origem: cad ? 'cpf' : 'webcam', p_foto_id: it.fotoId, p_confirmada: !!it.confirmada });
+            const a = S.alunos.get(it.aluno_id); if (a && it.fotoId && (cad || (!a.fb && !a.fs))) a.fb = it.fotoId;
             it.faceFeita = true; await idb.put('fila', it.id, it);
           }
           if (it.registrado && (!it.foto || it.fotoAnexada) && it.faceFeita) await idb.del('fila', it.id);
@@ -640,7 +647,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     const a = d.aluno, nome = esc(a?.n || ''), mat = esc(a?.m || '');
     const T = {
       ok: { classe: d.dentro === false || d.semFoto ? 'aviso' : 'ok', icone: d.dentro === false || d.semFoto ? 'alerta' : 'check', titulo: d.tipo === 'lanche' ? 'Lanche registrado' : 'Refeição registrada',
-        texto: `${nome} · ${mat}<br>às <b>${esc(d.hora)}</b>${d.dentro === false ? ` · <b>fora do horário</b> (${S.config.horario_inicio}–${S.config.horario_fim})` : ''}${d.semFoto ? '<br><b>Sem foto</b> (justificado)' : ''}${d.offline ? '<br>Sem internet: será enviado automaticamente.' : ''}${d.novaBase ? '<br><small>Foto salva como referência facial.</small>' : ''}${d.observacao ? `<br><small style="color:var(--vermelho)">${esc(d.observacao)}</small>` : ''}` },
+        texto: `${nome} · ${mat}<br>às <b>${esc(d.hora)}</b>${d.dentro === false ? ` · <b>fora do horário</b> (${S.config.horario_inicio}–${S.config.horario_fim})` : ''}${d.semFoto ? '<br><b>Sem foto</b> (justificado)' : ''}${d.offline ? '<br>Sem internet: será enviado automaticamente.' : ''}${d.novaBase ? '<br><small>Foto de hoje salva como nova foto do cadastro.</small>' : ''}${d.observacao ? `<br><small style="color:var(--vermelho)">${esc(d.observacao)}</small>` : ''}` },
       duplicado: { classe: 'erro', icone: 'x', titulo: 'Já registrado hoje', texto: `${nome}<br>${TIPO[d.tipo] || 'Registro'} às <b>${esc(d.hora || '')}</b>.<br><small>Vale uma refeição OU um lanche por dia.</small>` },
       inativo: { classe: 'erro', icone: 'x', titulo: 'Cadastro inativo no PASES', texto: `${nome}<br>Encaminhe o aluno à assistência estudantil.` },
       nao_encontrado: { classe: 'erro', icone: 'x', titulo: 'CPF não encontrado', texto: 'Este CPF não está cadastrado no PASES. Confira os números ou procure a assistência estudantil.' },
