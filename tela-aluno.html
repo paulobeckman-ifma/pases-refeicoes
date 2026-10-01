@@ -33,6 +33,13 @@
     .modalidade { font-size: 30px; font-weight: 800; padding: 14px; border-radius: 16px; background: var(--verde); border: 3px solid #b7f0c5; }
     .modalidade.lanche { background: #3b7dd8; border-color: #c4dcff; }
     .modalidade small { display: block; font-size: 14px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; opacity: .85; }
+    .escolha { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .escolha .opcao { font-size: 26px; font-weight: 800; padding: 12px; border-radius: 16px; border: 3px solid var(--linha); color: var(--tinta-2); opacity: .55; display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .escolha .opcao.sel { opacity: 1; color: #fff; background: var(--verde); border-color: #b7f0c5; transform: scale(1.04); }
+    .escolha .opcao.lanche.sel { background: #3b7dd8; border-color: #c4dcff; }
+    .escolha .opcao .tecla { font-size: 20px; }
+    .escolha-nota { margin: 0; font-size: 18px; color: var(--tinta-2); }
+    .escolha-nota b { color: #ffd98f; }
     body.embed .topo, body.embed .barra-ctrl { display: none; }
     body.embed main { height: 100vh; padding: 14px; gap: 14px; }
     .camera .dica { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); background: rgba(0,0,0,.65); padding: 10px 22px; border-radius: 99px; font-size: 22px; font-weight: 600; white-space: nowrap; }
