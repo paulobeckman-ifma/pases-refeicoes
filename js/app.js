@@ -3,7 +3,7 @@ import { $, $$, esc, ico, aviso, CFG } from './util.js';
 import { rpc, api, sessao, relogio, traduzir } from './api.js';
 import { montarBalcao } from './kiosk.js';
 
-export const VERSAO = '1.8.0';
+export const VERSAO = '1.9.0';
 const raiz = $('#app');
 let desmontar = null;
 
@@ -11,7 +11,7 @@ const ROTAS = {
   painel:        { titulo: 'Painel', icone: 'casa', perfis: ['admin', 'consulta'], carregar: () => import('./pag-painel.js') },
   balcao:        { titulo: 'Balcão', icone: 'balcao', perfis: ['admin', 'operador'], balcao: true },
   registros:     { titulo: 'Registros', icone: 'lista', perfis: ['admin', 'consulta', 'operador'], carregar: () => import('./pag-registros.js') },
-  relatorios:    { titulo: 'Relatórios', icone: 'grafico', perfis: ['admin', 'consulta'], carregar: () => import('./pag-relatorios.js') },
+  relatorios:    { titulo: 'Relatórios', icone: 'grafico', perfis: ['admin', 'consulta', 'operador'], carregar: () => import('./pag-relatorios.js') },
   alunos:        { titulo: 'Alunos', icone: 'usuarios', perfis: ['admin', 'consulta', 'operador'], carregar: () => import('./pag-alunos.js') },
   trocas:        { titulo: 'Trocas', icone: 'atualizar', perfis: ['admin', 'consulta'], carregar: () => import('./pag-trocas.js') },
   faces:         { titulo: 'Validar rostos', icone: 'rosto', perfis: ['admin'], carregar: () => import('./pag-faces.js') },
@@ -20,7 +20,7 @@ const ROTAS = {
   auditoria:     { titulo: 'Auditoria', icone: 'historico', perfis: ['admin'], carregar: () => import('./pag-auditoria.js') },
   conta:         { titulo: 'Minha conta', icone: 'usuario', perfis: ['admin', 'operador', 'consulta'], carregar: null }
 };
-const inicial = () => (sessao.perfil === 'operador' ? 'balcao' : 'painel');
+const inicial = () => (sessao.perfil === 'operador' ? 'registros' : 'painel');
 
 // ------------------------------------------------------------------ login
 function telaLogin(msg = '') {

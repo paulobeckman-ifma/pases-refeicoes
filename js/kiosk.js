@@ -80,7 +80,6 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
       <span class="pilula oculto" id="k-face"></span>
       <span class="espaco"></span>
       <button class="btn" id="k-tec" title="Mostrar ou esconder o teclado numérico na tela">${ico('teclado')} Teclado</button>
-      <button class="btn" id="k-troca">${ico('atualizar')} Solicitar troca</button>
       <button class="btn" id="k-registros">${ico('lista')} Registros</button>
       <button class="btn" id="k-camera">${ico('camera')} Câmera</button>
       <button class="btn" id="k-tela">${ico('monitor')} Tela do aluno</button>
@@ -307,7 +306,21 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     const el = $('#k-tipos', raiz); if (!el) return;
     el.classList.toggle('oculto', !mostrar || !S.tipoSel);
     el.className = `modalidade-balcao ${S.tipoSel === 'lanche' ? 'lanche' : 'refeicao'} ${mostrar && S.tipoSel ? '' : 'oculto'}`;
-    el.innerHTML = S.tipoSel ? `<small>Beneficiário de</small>${TIPO[S.tipoSel]}` : '';
+    const c = S.candidato?.aluno, troca = c && S.tipoSel !== modalidadeDe(c);
+    el.innerHTML = S.tipoSel ? `<small>${troca ? `Troca · cadastro: ${TIPO[modalidadeDe(c)]}` : 'Conforme o cadastro'}</small>${TIPO[S.tipoSel]}` : '';
+  }
+  function mensagemConfirmar(a, distancia) {
+    const troca = S.tipoSel !== modalidadeDe(a);
+    mensagem(`${a.n} · ${a.m || ''} · ${TIPO[S.tipoSel]}${troca ? ` (troca: cadastro é ${TIPO[modalidadeDe(a)]})` : ''}`,
+      `${distancia != null ? `semelhança ${semelhanca(distancia)}% · ` : 'pelo CPF · '}1 refeição · 2 lanche · ENTER confirma · ESC se não for ele(a)`);
+  }
+  // antes do ENTER o aluno pode trocar: tecla 1 = refeição, 2 = lanche (sem escolha, vale o cadastro)
+  function escolherTipo(t) {
+    const c = S.candidato; if (S.estado !== 'confirmar' || !c || S.tipoSel === t) return;
+    S.tipoSel = t; mostrarTipos(true); mensagemConfirmar(c.aluno, c.distancia);
+    clearTimeout(S.confirmarTimer);
+    S.confirmarTimer = setTimeout(() => { if (S.estado === 'confirmar') definirEstado('aguardando'); }, 25000);
+    tela({ tipo: 'estado', estado: 'confirmar', ...telaEscolha(c.aluno, S.fotoCand, c.distancia) });
   }
   function definirEstado(est, extra = {}) {
     S.estado = est; clearTimeout(S.confirmarTimer);
@@ -323,7 +336,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
       mensagem('Rosto não reconhecido', 'Peça ao aluno para digitar o CPF. A foto de hoje passará a ser a referência dele.');
     } else if (est === 'confirmar') {
       const a = extra.aluno;
-      mensagem(`${a.n} · ${a.m || ''} · ${TIPO[S.tipoSel]}`, `${extra.distancia != null ? `semelhança ${semelhanca(extra.distancia)}% · ` : 'pelo CPF · '}ENTER confirma · ESC se não for ele(a)`);
+      mensagemConfirmar(a, extra.distancia);
       S.confirmarTimer = setTimeout(() => { if (S.estado === 'confirmar') definirEstado('aguardando'); }, 25000);
     } else if (est === 'cpf') {
       mensagem('Digitando CPF…', 'Ao digitar o 11º número, os dados do aluno aparecem · ⌫ apaga · ESC cancela');
@@ -356,12 +369,12 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
   const modalidadeDe = (aluno) => (aluno.md === 'lanche' ? 'lanche' : 'refeicao');
   function telaEscolha(aluno, foto, distancia = null) {
     return { nome: aluno.n, matricula: aluno.m, curso: aluno.c, foto, semelhanca: distancia != null ? semelhanca(distancia) : null,
-      tipoSel: S.tipoSel, confirmar: S.config.reconhecimento.confirmar !== false };
+      tipoSel: S.tipoSel, md: modalidadeDe(aluno), confirmar: S.config.reconhecimento.confirmar !== false };
   }
-  // o tipo (refeição ou lanche) vem do cadastro do aluno; a troca é pedida ao coordenador
+  // vale o que estiver selecionado ao apertar ENTER (cadastro, ou a troca feita com 1/2)
   function confirmarEscolha() {
     const c = S.candidato; if (!c) return;
-    registrar(c.aluno, c.metodo, c.distancia, modalidadeDe(c.aluno));
+    registrar(c.aluno, c.metodo, c.distancia, S.tipoSel || modalidadeDe(c.aluno));
   }
 
   // foto de cadastro: usa o cache local; se precisar buscar no Drive, espera no máximo 1,5 s
@@ -372,7 +385,8 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
 
   // ---------------------------------------------------------------- teclado
   function digito(d) {
-    if (S.estado === 'processando' || S.estado === 'confirmar') return;
+    if (S.estado === 'confirmar') { if (d === '1') escolherTipo('refeicao'); else if (d === '2') escolherTipo('lanche'); return; }
+    if (S.estado === 'processando') return;
     if (S.estado === 'resultado') fecharResultado();
     if (S.cpf.length >= 11) return;
     if (S.estado !== 'cpf') { S.cap = null; definirEstado('cpf'); }
@@ -699,47 +713,6 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
   $('#k-total', raiz).onclick = verHoje;
   $('#k-tela', raiz).onclick = abrirTelaAluno;
   $('#k-rede', raiz).onclick = () => verificarConexao(true);
-  $('#k-troca', raiz).onclick = solicitarTroca;
-  // pedido do aluno para trocar refeição por lanche (ou o contrário): vai para o coordenador decidir
-  function solicitarTroca() {
-    let sel = S.candidato?.aluno || null;
-    const busca = (q) => {
-      q = q.trim().toLowerCase(); if (q.length < 3) return [];
-      const n = q.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      return [...S.alunos.values()].filter((a) => (a.n || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(n) || (a.m || '').toLowerCase().includes(q)).slice(0, 8);
-    };
-    const resumo = (a) => {
-      const de = modalidadeDe(a), para = de === 'lanche' ? 'refeicao' : 'lanche';
-      return `<div class="caixa" style="margin:4px 0 0"><b>${esc(a.n)}</b><br><span class="mudo">${esc(a.m || '')} · ${esc(a.c || '')}</span>
-        <p style="margin:8px 0 0">Hoje: <span class="selo ${de === 'lanche' ? 'azul' : 'verde'}">${TIPO[de]}</span> → pedido: <span class="selo ${para === 'lanche' ? 'azul' : 'verde'}">${TIPO[para]}</span></p></div>`;
-    };
-    modal({
-      titulo: 'Solicitar troca de modalidade',
-      corpo: `<p class="mudo" style="margin:0">O pedido vai para o coordenador do programa. Até ser aprovado, o aluno continua registrando na modalidade atual.</p>
-        <label class="campo"><span>Aluno (nome ou matrícula)</span><input type="text" data-q autocomplete="off" value="${sel ? esc(sel.n) : ''}"></label>
-        <div data-res class="lista-busca"></div><div data-sel>${sel ? resumo(sel) : ''}</div>
-        <label class="campo"><span>Motivo informado pelo aluno</span><textarea data-m rows="3" placeholder="Ex.: passou a ter aula à tarde e precisa almoçar no campus"></textarea></label>`,
-      aoAbrir: (el) => {
-        const q = $('[data-q]', el), res = $('[data-res]', el);
-        q.oninput = () => {
-          res.innerHTML = busca(q.value).map((a) => `<button type="button" class="item-busca" data-id="${a.id}"><b>${esc(a.n)}</b> <span class="mudo">${esc(a.m || '')} · ${TIPO[modalidadeDe(a)]}</span></button>`).join('');
-        };
-        res.onclick = (e) => {
-          const b = e.target.closest('[data-id]'); if (!b) return;
-          sel = S.alunos.get(b.dataset.id); res.innerHTML = ''; q.value = sel.n; $('[data-sel]', el).innerHTML = resumo(sel); $('[data-m]', el).focus();
-        };
-      },
-      botoes: [{ texto: 'Cancelar' }, { texto: 'Enviar ao coordenador', classe: 'primario', acao: async (fechar, el) => {
-        if (!sel) { aviso('Escolha o aluno na lista.', 'erro'); return false; }
-        const motivo = $('[data-m]', el).value.trim();
-        if (motivo.length < 5) { aviso('Informe o motivo do pedido.', 'erro'); return false; }
-        try {
-          const r = await api('troca_solicitar', { p_aluno_id: sel.id, p_motivo: motivo });
-          aviso(`Pedido enviado: ${TIPO[r.de]} → ${TIPO[r.para]}. Aguarda o coordenador.`, 'ok');
-        } catch (e) { aviso(e.message, 'erro'); return false; }
-      } }]
-    });
-  }
   $('#k-registros', raiz).onclick = () => { location.hash = '#/registros'; };
   $('#k-camera', raiz).onclick = escolherCamera; $('#k-camera2', raiz).onclick = escolherCamera;
   async function escolherCamera() {
@@ -878,7 +851,6 @@ function montarApoio(raiz, { aoSair, disp, canalRt, ativo, aoAssumir }) {
       <span class="pilula" id="a-con"></span>
       <span class="espaco"></span>
       <button class="btn" id="a-tec">${ico('teclado')} Teclado</button>
-      <button class="btn" id="a-troca">${ico('atualizar')} Solicitar troca</button>
       <button class="btn" id="a-registros">${ico('lista')} Registros</button>
       <button class="btn" id="a-semfoto">${ico('semcamera')} Sem foto</button>
       <button class="btn perigo" id="a-assumir">${ico('balcao')} Assumir o balcão</button>
@@ -968,40 +940,7 @@ function montarApoio(raiz, { aoSair, disp, canalRt, ativo, aoAssumir }) {
         cmd({ k: 'semfoto', j: i === 3 ? det : JUSTIFICATIVAS[i] + (det ? ` · ${det}` : '') }); fechar(); return false;
       } }] });
   };
-  $('#a-troca', raiz).onclick = () => solicitarTrocaApoio();
-  async function solicitarTrocaApoio() {
-    let alunos = [];
-    try { alunos = await api('alunos_listar'); } catch (e) { return aviso(e.message, 'erro'); }
-    let sel = null;
-    const norm = (x) => (x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-    modal({
-      titulo: 'Solicitar troca de modalidade',
-      corpo: `<p class="mudo" style="margin:0">O pedido vai para o coordenador do programa.</p>
-        <label class="campo"><span>Aluno (nome ou matrícula)</span><input type="text" data-q autocomplete="off"></label>
-        <div data-res class="lista-busca"></div><div data-sel></div>
-        <label class="campo"><span>Motivo informado pelo aluno</span><textarea data-m rows="3"></textarea></label>`,
-      aoAbrir: (el) => {
-        const q = $('[data-q]', el), res = $('[data-res]', el);
-        q.oninput = () => {
-          const t = norm(q.value.trim()); if (t.length < 3) { res.innerHTML = ''; return; }
-          res.innerHTML = alunos.filter((a) => a.ativo && (norm(a.nome).includes(t) || (a.matricula || '').toLowerCase().includes(t))).slice(0, 8)
-            .map((a) => `<button type="button" class="item-busca" data-id="${a.id}"><b>${esc(a.nome)}</b> <span class="mudo">${esc(a.matricula || '')} · ${TIPO[a.modalidade === 'lanche' ? 'lanche' : 'refeicao']}</span></button>`).join('');
-        };
-        res.onclick = (e) => {
-          const b = e.target.closest('[data-id]'); if (!b) return;
-          sel = alunos.find((a) => a.id === b.dataset.id); res.innerHTML = ''; q.value = sel.nome;
-          const de = sel.modalidade === 'lanche' ? 'lanche' : 'refeicao', para = de === 'lanche' ? 'refeicao' : 'lanche';
-          $('[data-sel]', el).innerHTML = `<div class="caixa" style="margin:4px 0 0"><b>${esc(sel.nome)}</b> · ${TIPO[de]} → ${TIPO[para]}</div>`;
-        };
-      },
-      botoes: [{ texto: 'Cancelar' }, { texto: 'Enviar ao coordenador', classe: 'primario', acao: async (fechar, el) => {
-        if (!sel) { aviso('Escolha o aluno na lista.', 'erro'); return false; }
-        const motivo = $('[data-m]', el).value.trim(); if (motivo.length < 5) { aviso('Informe o motivo do pedido.', 'erro'); return false; }
-        try { const r = await api('troca_solicitar', { p_aluno_id: sel.id, p_motivo: motivo }); aviso(`Pedido enviado: ${TIPO[r.de]} → ${TIPO[r.para]}.`, 'ok'); }
-        catch (e) { aviso(e.message, 'erro'); return false; }
-      } }]
-    });
-  }
+
   const assumirAqui = async () => {
     if (!encerrado && !(await confirmar(`Assumir o balcão? O notebook de ${esc(principalNome)} deixa de registrar e passa a ser apoio.`, { ok: 'Assumir', perigo: true }))) return;
     try {

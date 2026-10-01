@@ -53,6 +53,11 @@ window.addEventListener('resize', desenhar);
 video.addEventListener('loadedmetadata', desenhar);
 
 function mostrar(html, classe = '') { painel.className = 'painel ' + classe; painel.innerHTML = html; }
+// opções do dia: o aluno pode trocar com 1 (refeição) ou 2 (lanche) antes do ENTER
+const escolha = (t, md) => `<div class="escolha">
+    <div class="opcao ${t !== 'lanche' ? 'sel' : ''}"><span class="tecla">1</span>Refeição</div>
+    <div class="opcao lanche ${t === 'lanche' ? 'sel' : ''}"><span class="tecla">2</span>Lanche</div></div>
+  <p class="escolha-nota">${md && t !== md ? `<b>Troca:</b> seu cadastro é de ${md === 'lanche' ? 'lanche' : 'refeição'}` : 'Conforme seu cadastro · tecle 1 ou 2 para mudar'}</p>`;
 const modalidade = (t) => `<div class="modalidade ${t === 'lanche' ? 'lanche' : ''}"><small>Beneficiário de</small>${t === 'lanche' ? 'Lanche' : 'Refeição'}</div>`;
 
 function estadoPadrao() {
@@ -81,7 +86,7 @@ function aoEstado(m) {
       $('#dica').textContent = 'Identificado';
       mostrar(`<div class="fotos uma"><div class="foto">${m.foto ? `<img src="${m.foto}" alt="">` : 'Sem foto de cadastro'}<span>Cadastro</span></div></div>
         <div class="nome">${esc(m.nome)}</div><div class="sub">Matrícula ${esc(m.matricula || '')}<br>${esc(m.curso || '')}</div>
-        ${modalidade(m.tipoSel)}
+        ${escolha(m.tipoSel, m.md)}
         <p class="grande">Confirme com <span class="tecla">ENTER</span></p>
         <p>Não é você? Tecle <span class="tecla">ESC</span> ou <span class="tecla">-</span>.</p>`, 'ok'); break; }
     case 'cpf':

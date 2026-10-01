@@ -15,7 +15,7 @@ export async function render(el, { cabecalho, perfil }) {
   let periodo = null, lista = [], filtrada = [], pagina = 0;
 
   el.innerHTML = cabecalho('Registros', 'Cada linha é uma refeição ou lanche registrado. Linhas vermelhas foram registradas sem foto.',
-    `${admin ? `<button class="btn" id="r-novo">${ico('mais')} Registro manual</button>` : ''}<button class="btn" id="r-csv">${ico('baixar')} Exportar CSV</button>`) + `
+    `${admin || perfil === 'operador' ? `<button class="btn" id="r-novo">${ico('mais')} Registro manual</button>` : ''}<button class="btn" id="r-csv">${ico('baixar')} Exportar CSV</button>`) + `
     <div class="barra-filtros">
       <div class="linha-flex" id="r-periodo"></div>
       <label class="campo" style="min-width:220px"><span>Buscar aluno</span><input type="search" id="r-busca" placeholder="Nome ou matrícula"></label>
@@ -26,6 +26,7 @@ export async function render(el, { cabecalho, perfil }) {
       <div class="linha-flex" style="padding-bottom:8px">
         <label class="check"><input type="checkbox" id="r-semfoto"> Só sem foto</label>
         <label class="check"><input type="checkbox" id="r-fora"> Só fora do horário</label>
+        <label class="check"><input type="checkbox" id="r-trocas"> Só trocas</label>
         <label class="check"><input type="checkbox" id="r-excl"> Incluir excluídos</label>
       </div>
     </div>
@@ -41,7 +42,7 @@ export async function render(el, { cabecalho, perfil }) {
   }
   function filtrar() {
     const q = normalizar($('#r-busca').value.trim()), curso = $('#r-curso').value, met = $('#r-metodo').value, tipo = $('#r-tipo').value, turma = $('#r-turma').value;
-    const sf = $('#r-semfoto').checked, fo = $('#r-fora').checked;
+    const sf = $('#r-semfoto').checked, fo = $('#r-fora').checked, so = $('#r-trocas').checked;
     filtrada = lista.filter((r) => {
       const a = A.get(r.a) || {};
       if (q && !normalizar(`${a.nome} ${a.matricula}`).includes(q)) return false;
@@ -51,19 +52,20 @@ export async function render(el, { cabecalho, perfil }) {
       if (met && r.m !== met) return false;
       if (sf && r.fs !== 'sem_foto') return false;
       if (fo && r.dh) return false;
+      if (so && !r.tr) return false;
       return true;
     }).reverse();
     pagina = 0; desenhar();
   }
   function desenhar() {
     const ativos = filtrada.filter((r) => !r.ex);
-    $('#r-resumo').innerHTML = `<b>${ativos.length}</b> registro(s) (${ativos.filter((r) => r.tp !== 'lanche').length} refeição · ${ativos.filter((r) => r.tp === 'lanche').length} lanche) · ${new Set(ativos.map((r) => r.a)).size} aluno(s) · ${ativos.filter((r) => r.fs === 'sem_foto').length} sem foto · ${ativos.filter((r) => !r.dh).length} fora do horário · ${esc(periodo.rotulo)}`;
+    $('#r-resumo').innerHTML = `<b>${ativos.length}</b> registro(s) (${ativos.filter((r) => r.tp !== 'lanche').length} refeição · ${ativos.filter((r) => r.tp === 'lanche').length} lanche) · ${new Set(ativos.map((r) => r.a)).size} aluno(s) · ${ativos.filter((r) => r.fs === 'sem_foto').length} sem foto · ${ativos.filter((r) => !r.dh).length} fora do horário · ${ativos.filter((r) => r.tr).length} troca(s) · ${esc(periodo.rotulo)}`;
     const pg = filtrada.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA);
     $('#r-corpo').innerHTML = pg.map((r) => {
       const a = A.get(r.a) || {};
       return `<tr class="clicavel ${r.ex ? 'excluido' : r.fs === 'sem_foto' ? 'sem-foto' : ''}" data-id="${r.id}">
         <td class="num">${fmtData(r.dt)}</td><td class="num">${r.h.slice(0, 5)}</td>
-        <td>${r.tp === 'lanche' ? '<span class="selo azul">Lanche</span>' : '<span class="selo verde">Refeição</span>'}</td>
+        <td>${r.tp === 'lanche' ? '<span class="selo azul">Lanche</span>' : '<span class="selo verde">Refeição</span>'}${r.tr ? '<br><span class="selo ambar" title="Diferente do cadastro">troca</span>' : ''}</td>
         <td>${esc(a.nome || '?')}<br><small class="mudo">${esc(a.matricula || '')}</small>${r.x ? ' <span class="selo azul">extra</span>' : ''}${r.obs ? ` <span class="selo ambar" title="${esc(r.obs)}">obs.</span>` : ''}</td>
         <td class="pequeno"><b>${esc(turmaDe(a.matricula))}</b><br>${esc(a.curso || '')}</td><td>${METODO[r.m]}</td>
         <td>${r.fs === 'sem_foto' ? `<span class="selo vermelho">${ico('semcamera')} SEM FOTO</span><br><small>${esc(r.j || '')}</small>` : r.fs === 'pendente' ? '<span class="selo">enviando</span>' : `<span class="selo verde">${ico('camera')} ok</span>`}</td>
@@ -86,7 +88,7 @@ export async function render(el, { cabecalho, perfil }) {
         ${r.fs === 'sem_foto' ? `<div class="caixa erro-caixa"><b>Sem foto.</b> Justificativa: ${esc(r.j || '')}</div>` : ''}
         ${r.obs ? `<div class="caixa aviso-caixa"><b>Observação:</b> ${esc(r.obs)}</div>` : ''}
         <dl class="dl"><dt>Aluno</dt><dd>${esc(a.nome || '')} · ${esc(a.matricula || '')}</dd><dt>Curso</dt><dd>${esc(a.curso || '')}</dd>
-          <dt>Tipo</dt><dd>${TIPO[r.tp || 'refeicao']}</dd>
+          <dt>Tipo</dt><dd>${TIPO[r.tp || 'refeicao']}${r.tr ? ` <span class="selo ambar">troca: cadastro era ${TIPO[r.mc] || r.mc}</span>` : ''}</dd>
           <dt>Data e hora</dt><dd>${fmtData(r.dt)} às ${esc(r.h)} ${r.tp === 'lanche' ? '' : r.dh ? '<span class="selo verde">dentro do horário</span>' : '<span class="selo ambar">fora do horário</span>'}</dd>
           <dt>Identificação</dt><dd>${METODO[r.m]}${r.d != null ? ` (distância facial ${Number(r.d).toFixed(3)})` : ''}</dd>
           <dt>Atendente</dt><dd>${esc(r.op || '')}</dd><dt>Recebido pelo servidor</dt><dd>${fmtDataHora(r.rc)}${r.off ? ' · registrado sem internet e enviado depois' : ''}</dd>
@@ -144,14 +146,14 @@ export async function render(el, { cabecalho, perfil }) {
         <label class="campo"><span>Tipo</span><select data-tp><option value="">Conforme o cadastro do aluno</option><option value="refeicao">Refeição</option><option value="lanche">Lanche</option></select></label>
         <label class="campo"><span>Data e hora</span><input type="datetime-local" data-dh value="${agora}"></label>
         <label class="campo"><span>Justificativa</span><textarea data-j placeholder="Ex.: notebook do balcão sem energia; lista em papel assinada"></textarea></label>
-        <label class="check"><input type="checkbox" data-x> Registro extra (o aluno já tem refeição ou lanche nesse dia)</label>`,
+        ${admin ? '<label class="check"><input type="checkbox" data-x> Registro extra (o aluno já tem refeição ou lanche nesse dia)</label>' : ''}`,
       botoes: [{ texto: 'Cancelar' }, { texto: 'Registrar', classe: 'primario', acao: async (fechar, el) => {
         const aid = idDoSeletor(el); if (!aid) { aviso('Escolha um aluno da lista.', 'erro'); return false; }
         try {
           const r = await api('registrar_refeicao', { p_id: uuid(), p_aluno_id: aid, p_registrado_em: paraISO($('[data-dh]', el).value),
-            p_metodo: 'manual', p_tem_foto: false, p_justificativa: $('[data-j]', el).value, p_extra: $('[data-x]', el).checked, p_tipo: $('[data-tp]', el).value });
+            p_metodo: 'manual', p_tem_foto: false, p_justificativa: $('[data-j]', el).value, p_extra: !!$('[data-x]', el)?.checked, p_tipo: $('[data-tp]', el).value });
           if (r.status === 'ok') { aviso(`Registrado: ${r.nome} às ${r.hora}.`, 'ok'); fechar(); carregar(); }
-          else if (r.status === 'duplicado') aviso(`Já existe ${r.tipo === 'lanche' ? 'lanche' : 'refeição'} nesse dia às ${r.hora}. Marque "registro extra" se for o caso.`, 'erro');
+          else if (r.status === 'duplicado') aviso(`Já existe ${r.tipo === 'lanche' ? 'lanche' : 'refeição'} nesse dia às ${r.hora}. ${admin ? 'Marque "registro extra" se for o caso.' : ''}`, 'erro');
           else if (r.status === 'justificativa_obrigatoria') aviso('Escreva a justificativa (mínimo 5 caracteres).', 'erro');
           else aviso(r.status, 'erro');
         } catch (e) { aviso(e.message, 'erro'); }
@@ -163,12 +165,12 @@ export async function render(el, { cabecalho, perfil }) {
   // ---------------------------------------------------------------- eventos
   D.seletorPeriodo($('#r-periodo'), cfg, (p) => { periodo = p; carregar(); }, 'hoje');
   $('#r-busca').oninput = debounce(filtrar, 200);
-  ['#r-curso', '#r-metodo', '#r-tipo', '#r-turma', '#r-semfoto', '#r-fora'].forEach((s) => ($(s).onchange = filtrar));
+  ['#r-curso', '#r-metodo', '#r-tipo', '#r-turma', '#r-semfoto', '#r-fora', '#r-trocas'].forEach((s) => ($(s).onchange = filtrar));
   $('#r-excl').onchange = carregar;
   $('#r-corpo').onclick = (e) => { const tr = e.target.closest('tr[data-id]'); if (tr) detalhe(filtrada.find((r) => r.id === tr.dataset.id)); };
   $('#r-pag').onclick = (e) => { const b = e.target.closest('[data-p]'); if (b) { pagina += Number(b.dataset.p); desenhar(); } };
-  if (admin) $('#r-novo').onclick = novoManual;
+  if ($('#r-novo')) $('#r-novo').onclick = novoManual;
   $('#r-csv').onclick = () => baixarCsv(`pases_registros_${periodo.ini}_a_${periodo.fim}`,
-    ['data', 'hora', 'tipo', 'aluno', 'matricula', 'turma', 'curso', 'metodo', 'foto', 'justificativa_sem_foto', 'dentro_do_horario', 'extra', 'atendente', 'offline', 'observacao', 'excluido', 'motivo_exclusao', 'id'],
-    filtrada.map((r) => { const a = A.get(r.a) || {}; return [fmtData(r.dt), r.h, TIPO[r.tp || 'refeicao'], a.nome, a.matricula, turmaDe(a.matricula), a.curso, METODO[r.m], r.fs === 'sem_foto' ? 'SEM FOTO' : r.fs, r.j, r.dh ? 'sim' : 'não', r.x ? 'sim' : '', r.op, r.off ? 'sim' : '', r.obs, r.ex ? 'sim' : '', r.exm, r.id]; }));
+    ['data', 'hora', 'tipo', 'aluno', 'matricula', 'turma', 'curso', 'metodo', 'foto', 'justificativa_sem_foto', 'dentro_do_horario', 'troca', 'modalidade_cadastro', 'extra', 'atendente', 'offline', 'observacao', 'excluido', 'motivo_exclusao', 'id'],
+    filtrada.map((r) => { const a = A.get(r.a) || {}; return [fmtData(r.dt), r.h, TIPO[r.tp || 'refeicao'], a.nome, a.matricula, turmaDe(a.matricula), a.curso, METODO[r.m], r.fs === 'sem_foto' ? 'SEM FOTO' : r.fs, r.j, r.dh ? 'sim' : 'não', r.tr ? 'sim' : '', TIPO[r.mc] || '', r.x ? 'sim' : '', r.op, r.off ? 'sim' : '', r.obs, r.ex ? 'sim' : '', r.exm, r.id]; }));
 }

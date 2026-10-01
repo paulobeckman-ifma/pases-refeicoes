@@ -84,7 +84,6 @@ export async function render(el, { cabecalho, perfil }) {
     const m = modal({
       titulo: novo ? 'Novo aluno' : a.nome, largo: true, corpo,
       botoes: operador ? [
-        { texto: `${ico('atualizar')} Solicitar troca`, acao: async () => { await pedirTroca(a); return false; } },
         { texto: 'Fechar' }] : admin ? [
         ...(novo ? [] : a.cancelado_em ? [
           { texto: `${ico('atualizar')} Reativar cadastro`, acao: async (fechar) => {
@@ -105,7 +104,6 @@ export async function render(el, { cabecalho, perfil }) {
             } catch (e) { aviso(e.message, 'erro'); }
             return false; } }
         ]),
-        ...(novo ? [] : [{ texto: `${ico('atualizar')} Solicitar troca`, acao: async () => { await pedirTroca(a); return false; } }]),
         { texto: 'Fechar' }, { texto: 'Salvar', classe: 'primario', acao: async (fechar, el) => {
         const f = $('[data-form]', el);
         const cpf = soDigitos(f.cpf.value);
