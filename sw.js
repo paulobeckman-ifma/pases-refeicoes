@@ -1,5 +1,5 @@
 // Service worker: permite abrir o balcão mesmo sem internet (arquivos do sistema ficam guardados no computador).
-const CACHE = 'pases-v1.10';
+const CACHE = 'pases-v1.11';
 const ESSENCIAIS = [
   './', 'index.html', 'tela-aluno.html', 'config.js', 'css/app.css',
   'js/app.js', 'js/util.js', 'js/api.js', 'js/camera.js', 'js/face.js', 'js/kiosk.js', 'js/tela-aluno.js', 'js/tempo-real.js',
