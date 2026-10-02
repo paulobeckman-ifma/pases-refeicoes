@@ -10,19 +10,19 @@ export async function render(el, { cabecalho, perfil }) {
   const admin = perfil === 'admin', operador = perfil === 'operador';
   let lista = await D.alunos(true);
 
-  el.innerHTML = cabecalho('Alunos do PASES', 'Beneficiários cadastrados. Só alunos ativos conseguem registrar refeição no balcão.',
+  el.innerHTML = cabecalho('Alunos do PASES', 'Beneficiários cadastrados. Só alunos ativos conseguem registrar no balcão.',
     admin ? `<button class="btn" id="a-novo">${ico('mais')} Novo aluno</button><button class="btn" id="a-imp">${ico('enviar')} Importar planilha</button>
       <button class="btn" id="a-suap">${ico('camera')} Fotos do SUAP</button><button class="btn" id="a-ref">${ico('rosto')} Gerar referências faciais</button>
       <button class="btn" id="a-csv">${ico('baixar')} CSV</button>` : operador ? '' : `<button class="btn" id="a-csv">${ico('baixar')} CSV</button>`) + `
     <div class="barra-filtros">
       <label class="campo" style="min-width:260px"><span>Buscar</span><input type="search" id="a-busca" placeholder="Nome, matrícula ou CPF"></label>
-      <label class="campo"><span>Modalidade</span><select id="a-mod"><option value="">Refeição e lanche</option><option value="refeicao">Refeição (almoço)</option><option value="lanche">Lanche</option></select></label>
+      <label class="campo"><span>Modalidade</span><select id="a-mod"><option value="">Almoço e lanche</option><option value="refeicao">Almoço</option><option value="lanche">Lanche</option></select></label>
       <label class="campo"><span>Mostrar</span><select id="a-filtro">
         <option value="ativos">Ativos</option><option value="">Todos</option><option value="inativos">Inativos</option><option value="cancelados">Cadastro cancelado</option>
         <option value="semcpf">Sem CPF</option><option value="semref">Sem referência facial</option><option value="semsuap">Sem foto do SUAP</option><option value="pend">Com rosto a validar</option></select></label>
     </div>
     <div id="a-resumo" class="pequeno mudo" style="margin-bottom:8px"></div>
-    <div class="tabela-wrap"><table class="tabela"><thead><tr><th>Aluno</th><th>Modalidade</th><th>Curso</th><th>CPF</th><th>Situação</th><th>Reconhecimento</th><th class="num">Refeições</th><th>Última</th></tr></thead>
+    <div class="tabela-wrap"><table class="tabela"><thead><tr><th>Aluno</th><th>Modalidade</th><th>Curso</th><th>CPF</th><th>Situação</th><th>Reconhecimento</th><th class="num">Registros</th><th>Última</th></tr></thead>
     <tbody id="a-corpo"></tbody></table></div>`;
 
   function filtrar() {
@@ -37,7 +37,7 @@ export async function render(el, { cabecalho, perfil }) {
       return true;
     });
     const at = lista.filter((a) => a.ativo);
-    $('#a-resumo').innerHTML = `${t.length} exibido(s) · ${at.length} ativos (${at.filter((a) => a.modalidade !== 'lanche').length} refeição, ${at.filter((a) => a.modalidade === 'lanche').length} lanche) · ${lista.filter((a) => a.cancelado_em).length} cancelado(s) · ${at.filter((a) => !a.cpf).length} ativos sem CPF · ${at.filter((a) => !a.faces).length} ativos sem referência facial`;
+    $('#a-resumo').innerHTML = `${t.length} exibido(s) · ${at.length} ativos (${at.filter((a) => a.modalidade !== 'lanche').length} almoço, ${at.filter((a) => a.modalidade === 'lanche').length} lanche) · ${lista.filter((a) => a.cancelado_em).length} cancelado(s) · ${at.filter((a) => !a.cpf).length} ativos sem CPF · ${at.filter((a) => !a.faces).length} ativos sem referência facial`;
     $('#a-corpo').innerHTML = t.map((a) => {
       const fc = a.faces || {};
       return `<tr class="clicavel" data-id="${a.id}"><td>${esc(a.nome)}${a.cancelado_em ? ' <span class="selo vermelho-suave">cancelado</span>' : a.ativo ? '' : ' <span class="selo">inativo</span>'}<br><small class="mudo">${esc(a.matricula || '')}</small></td>
@@ -73,14 +73,14 @@ export async function render(el, { cabecalho, perfil }) {
           <datalist id="dl-cursos">${[...new Set(lista.map((x) => x.curso).filter(Boolean))].sort().map((c) => `<option value="${esc(c)}">`).join('')}</datalist></label>
         <label class="campo"><span>Nível</span><input type="text" name="nivel" value="${esc(a.nivel || '')}" list="dl-niveis" ${admin ? '' : 'disabled'}><datalist id="dl-niveis"><option value="Técnico"><option value="Graduação"></datalist></label>
         <label class="campo"><span>Modalidade no PASES</span><select name="modalidade" ${admin ? '' : 'disabled'}>
-          <option value="refeicao" ${a.modalidade !== 'lanche' ? 'selected' : ''}>Refeição (almoço)</option><option value="lanche" ${a.modalidade === 'lanche' ? 'selected' : ''}>Lanche</option></select></label>
+          <option value="refeicao" ${a.modalidade !== 'lanche' ? 'selected' : ''}>Almoço</option><option value="lanche" ${a.modalidade === 'lanche' ? 'selected' : ''}>Lanche</option></select></label>
         <label class="campo"><span>Situação no SUAP</span><input type="text" name="situacao_suap" value="${esc(a.situacao_suap || '')}" ${admin ? '' : 'disabled'}></label>
         <label class="campo"><span>Link da foto no SUAP</span><input type="text" name="foto_suap_url" value="${esc(a.foto_suap_url || '')}" ${admin ? '' : 'disabled'}></label>
         <label class="campo" style="grid-column:1/-1"><span>Observação</span><textarea name="observacao" ${admin ? '' : 'disabled'}>${esc(a.observacao || '')}</textarea></label>
-        <label class="check"><input type="checkbox" name="ativo" ${a.ativo ? 'checked' : ''} ${admin && !a.cancelado_em ? '' : 'disabled'}> Ativo no PASES (pode registrar refeição)${a.cancelado_em ? ' · use "Reativar cadastro"' : ''}</label>
+        <label class="check"><input type="checkbox" name="ativo" ${a.ativo ? 'checked' : ''} ${admin && !a.cancelado_em ? '' : 'disabled'}> Ativo no PASES (pode registrar almoço ou lanche)${a.cancelado_em ? ' · use "Reativar cadastro"' : ''}</label>
       </form>
-      ${a.cancelado_em ? `<div class="caixa erro-caixa"><b>Cadastro cancelado</b> em ${fmtDataHora(a.cancelado_em)}. Motivo: ${esc(a.cancelado_motivo || '')}. O histórico de refeições foi mantido; as referências faciais foram apagadas.</div>` : ''}
-      ${novo ? '' : `<div><h3 style="margin-bottom:8px">Refeições nos últimos 12 meses</h3><div data-hist class="pequeno mudo">Carregando…</div></div>`}`;
+      ${a.cancelado_em ? `<div class="caixa erro-caixa"><b>Cadastro cancelado</b> em ${fmtDataHora(a.cancelado_em)}. Motivo: ${esc(a.cancelado_motivo || '')}. O histórico de registros foi mantido; as referências faciais foram apagadas.</div>` : ''}
+      ${novo ? '' : `<div><h3 style="margin-bottom:8px">Registros nos últimos 12 meses</h3><div data-hist class="pequeno mudo">Carregando…</div></div>`}`;
     const m = modal({
       titulo: novo ? 'Novo aluno' : a.nome, largo: true, corpo,
       botoes: operador ? [
@@ -91,7 +91,7 @@ export async function render(el, { cabecalho, perfil }) {
             try { await api('aluno_reativar', { p_aluno_id: a.id }); aviso('Cadastro reativado.', 'ok'); fechar(); recarregar(); } catch (e) { aviso(e.message, 'erro'); }
             return false; } },
           ...(a.total ? [] : [{ texto: `${ico('lixo')} Excluir definitivamente`, classe: 'perigo', acao: async (fechar) => {
-            if (!(await confirmar(`Excluir definitivamente o cadastro de ${esc(a.nome)}? Não há refeições registradas. Esta ação não pode ser desfeita.`, { perigo: true, ok: 'Excluir' }))) return false;
+            if (!(await confirmar(`Excluir definitivamente o cadastro de ${esc(a.nome)}? Não há registros. Esta ação não pode ser desfeita.`, { perigo: true, ok: 'Excluir' }))) return false;
             try { await api('aluno_excluir', { p_aluno_id: a.id }); aviso('Cadastro excluído.', 'ok'); fechar(); recarregar(); } catch (e) { aviso(e.message, 'erro'); }
             return false; } }])
         ] : [
@@ -121,8 +121,8 @@ export async function render(el, { cabecalho, perfil }) {
       api('refeicoes_listar', { p_ini: addDias(hojeISO(), -365), p_fim: hojeISO(), p_aluno_id: a.id }).then((rs) => {
         const pm = {}; rs.forEach((r) => { const k = r.dt.slice(0, 7); pm[k] = (pm[k] || 0) + 1; });
         const h = $('[data-hist]', el2); if (!h) return;
-        h.innerHTML = rs.length ? `${rs.length} refeição(ões) · ${rs.filter((r) => r.fs === 'sem_foto').length} sem foto · ${rs.filter((r) => !r.dh).length} fora do horário<br>` +
-          Object.entries(pm).sort().reverse().map(([k, n]) => `<span class="selo" style="margin:3px 4px 0 0">${MESES[+k.slice(5) - 1].slice(0, 3)}/${k.slice(2, 4)}: ${n}</span>`).join('') : 'Nenhuma refeição registrada.';
+        h.innerHTML = rs.length ? `${rs.length} registro(s) · ${rs.filter((r) => r.fs === 'sem_foto').length} sem foto · ${rs.filter((r) => !r.dh).length} fora do horário<br>` +
+          Object.entries(pm).sort().reverse().map(([k, n]) => `<span class="selo" style="margin:3px 4px 0 0">${MESES[+k.slice(5) - 1].slice(0, 3)}/${k.slice(2, 4)}: ${n}</span>`).join('') : 'Nenhum registro.';
       }).catch(() => {});
     }
     if (!(admin || operador) || novo || a.cancelado_em) return;

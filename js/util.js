@@ -75,7 +75,7 @@ export function turmaDe(matricula) {
   const m = /^(\d{4})[12]([A-Z]+)(?:\.[A-Z]+)?\d{3,5}$/i.exec(String(matricula || '').trim());
   return m ? `${m[2].toUpperCase()} ${m[1]}` : '';
 }
-export const TIPO = { refeicao: 'Refeição', lanche: 'Lanche' };
+export const TIPO = { refeicao: 'Almoço', lanche: 'Lanche' };
 export const soDigitos = (s) => String(s ?? '').replace(/\D/g, '');
 export function cpfValido(c) {
   c = soDigitos(c);

@@ -14,12 +14,12 @@ export async function render(el, { cabecalho, perfil }) {
   const turmas = [...new Set(alunos.map((a) => turmaDe(a.matricula)).filter(Boolean))].sort();
   let periodo = null, lista = [], filtrada = [], pagina = 0;
 
-  el.innerHTML = cabecalho('Registros', 'Cada linha é uma refeição ou lanche registrado. Linhas vermelhas foram registradas sem foto.',
+  el.innerHTML = cabecalho('Registros', 'Cada linha é um almoço ou lanche registrado. Linhas vermelhas foram registradas sem foto.',
     `${admin || perfil === 'operador' ? `<button class="btn" id="r-novo">${ico('mais')} Registro manual</button>` : ''}<button class="btn" id="r-csv">${ico('baixar')} Exportar CSV</button>`) + `
     <div class="barra-filtros">
       <div class="linha-flex" id="r-periodo"></div>
       <label class="campo" style="min-width:220px"><span>Buscar aluno</span><input type="search" id="r-busca" placeholder="Nome ou matrícula"></label>
-      <label class="campo"><span>Tipo</span><select id="r-tipo"><option value="">Refeição e lanche</option><option value="refeicao">Só refeição</option><option value="lanche">Só lanche</option></select></label>
+      <label class="campo"><span>Tipo</span><select id="r-tipo"><option value="">Almoço e lanche</option><option value="refeicao">Só almoço</option><option value="lanche">Só lanche</option></select></label>
       <label class="campo"><span>Turma</span><select id="r-turma"><option value="">Todas</option>${turmas.map((t) => `<option>${esc(t)}</option>`).join('')}</select></label>
       <label class="campo"><span>Curso</span><select id="r-curso"><option value="">Todos</option>${cursos.map((c) => `<option>${esc(c)}</option>`).join('')}</select></label>
       <label class="campo"><span>Método</span><select id="r-metodo"><option value="">Todos</option><option value="facial">Facial</option><option value="cpf">CPF</option><option value="manual">Manual</option></select></label>
@@ -59,13 +59,13 @@ export async function render(el, { cabecalho, perfil }) {
   }
   function desenhar() {
     const ativos = filtrada.filter((r) => !r.ex);
-    $('#r-resumo').innerHTML = `<b>${ativos.length}</b> registro(s) (${ativos.filter((r) => r.tp !== 'lanche').length} refeição · ${ativos.filter((r) => r.tp === 'lanche').length} lanche) · ${new Set(ativos.map((r) => r.a)).size} aluno(s) · ${ativos.filter((r) => r.fs === 'sem_foto').length} sem foto · ${ativos.filter((r) => !r.dh).length} fora do horário · ${ativos.filter((r) => r.tr).length} troca(s) · ${esc(periodo.rotulo)}`;
+    $('#r-resumo').innerHTML = `<b>${ativos.length}</b> registro(s) (${ativos.filter((r) => r.tp !== 'lanche').length} almoço · ${ativos.filter((r) => r.tp === 'lanche').length} lanche) · ${new Set(ativos.map((r) => r.a)).size} aluno(s) · ${ativos.filter((r) => r.fs === 'sem_foto').length} sem foto · ${ativos.filter((r) => !r.dh).length} fora do horário · ${ativos.filter((r) => r.tr).length} troca(s) · ${esc(periodo.rotulo)}`;
     const pg = filtrada.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA);
     $('#r-corpo').innerHTML = pg.map((r) => {
       const a = A.get(r.a) || {};
       return `<tr class="clicavel ${r.ex ? 'excluido' : r.fs === 'sem_foto' ? 'sem-foto' : ''}" data-id="${r.id}">
         <td class="num">${fmtData(r.dt)}</td><td class="num">${r.h.slice(0, 5)}</td>
-        <td>${r.tp === 'lanche' ? '<span class="selo azul">Lanche</span>' : '<span class="selo verde">Refeição</span>'}${r.tr ? '<br><span class="selo ambar" title="Diferente do cadastro">troca</span>' : ''}</td>
+        <td>${r.tp === 'lanche' ? '<span class="selo azul">Lanche</span>' : '<span class="selo verde">Almoço</span>'}${r.tr ? '<br><span class="selo ambar" title="Diferente do cadastro">troca</span>' : ''}</td>
         <td>${esc(a.nome || '?')}<br><small class="mudo">${esc(a.matricula || '')}</small>${r.x ? ' <span class="selo azul">extra</span>' : ''}${r.obs ? ` <span class="selo ambar" title="${esc(r.obs)}">obs.</span>` : ''}</td>
         <td class="pequeno"><b>${esc(turmaDe(a.matricula))}</b><br>${esc(a.curso || '')}</td><td>${METODO[r.m]}</td>
         <td>${r.fs === 'sem_foto' ? `<span class="selo vermelho">${ico('semcamera')} SEM FOTO</span><br><small>${esc(r.j || '')}</small>` : r.fs === 'pendente' ? '<span class="selo">enviando</span>' : `<span class="selo verde">${ico('camera')} ok</span>`}</td>
@@ -92,7 +92,7 @@ export async function render(el, { cabecalho, perfil }) {
           <dt>Data e hora</dt><dd>${fmtData(r.dt)} às ${esc(r.h)} ${r.tp === 'lanche' ? '' : r.dh ? '<span class="selo verde">dentro do horário</span>' : '<span class="selo ambar">fora do horário</span>'}</dd>
           <dt>Identificação</dt><dd>${METODO[r.m]}${r.d != null ? ` (distância facial ${Number(r.d).toFixed(3)})` : ''}</dd>
           <dt>Atendente</dt><dd>${esc(r.op || '')}</dd><dt>Recebido pelo servidor</dt><dd>${fmtDataHora(r.rc)}${r.off ? ' · registrado sem internet e enviado depois' : ''}</dd>
-          ${r.x ? '<dt>Refeição extra</dt><dd>Sim (liberada por administrador)</dd>' : ''}<dt>Código</dt><dd class="pequeno mudo">${r.id}</dd></dl>`,
+          ${r.x ? '<dt>Registro extra</dt><dd>Sim (liberado por administrador)</dd>' : ''}<dt>Código</dt><dd class="pequeno mudo">${r.id}</dd></dl>`,
       botoes: admin ? [
         r.ex ? { texto: `${ico('atualizar')} Restaurar`, acao: async () => { await api('refeicao_restaurar', { p_id: r.id }); aviso('Registro restaurado.', 'ok'); carregar(); } }
           : { texto: `${ico('lixo')} Excluir`, classe: 'perigo', acao: async (fechar) => {
@@ -122,7 +122,7 @@ export async function render(el, { cabecalho, perfil }) {
   function editar(r) {
     modal({
       titulo: 'Editar registro', corpo: `${seletorAluno(r.a)}
-        <label class="campo"><span>Tipo</span><select data-tp><option value="refeicao" ${r.tp !== 'lanche' ? 'selected' : ''}>Refeição</option><option value="lanche" ${r.tp === 'lanche' ? 'selected' : ''}>Lanche</option></select></label>
+        <label class="campo"><span>Tipo</span><select data-tp><option value="refeicao" ${r.tp !== 'lanche' ? 'selected' : ''}>Almoço</option><option value="lanche" ${r.tp === 'lanche' ? 'selected' : ''}>Lanche</option></select></label>
         <label class="campo"><span>Data e hora</span><input type="datetime-local" data-dh value="${r.dt}T${r.h.slice(0, 5)}"></label>
         ${r.fs === 'sem_foto' ? `<label class="campo"><span>Justificativa (sem foto)</span><textarea data-j>${esc(r.j || '')}</textarea></label>` : ''}
         <label class="campo"><span>Observação</span><textarea data-o>${esc(r.obs || '')}</textarea></label>
@@ -143,17 +143,17 @@ export async function render(el, { cabecalho, perfil }) {
     modal({
       titulo: 'Registro manual', corpo: `<div class="caixa aviso-caixa pequeno">Use quando o balcão não pôde ser usado. O registro fica marcado como <b>manual e sem foto</b> e exige justificativa.</div>
         ${seletorAluno()}
-        <label class="campo"><span>Tipo</span><select data-tp><option value="">Conforme o cadastro do aluno</option><option value="refeicao">Refeição</option><option value="lanche">Lanche</option></select></label>
+        <label class="campo"><span>Tipo</span><select data-tp><option value="">Conforme o cadastro do aluno</option><option value="refeicao">Almoço</option><option value="lanche">Lanche</option></select></label>
         <label class="campo"><span>Data e hora</span><input type="datetime-local" data-dh value="${agora}"></label>
         <label class="campo"><span>Justificativa</span><textarea data-j placeholder="Ex.: notebook do balcão sem energia; lista em papel assinada"></textarea></label>
-        ${admin ? '<label class="check"><input type="checkbox" data-x> Registro extra (o aluno já tem refeição ou lanche nesse dia)</label>' : ''}`,
+        ${admin ? '<label class="check"><input type="checkbox" data-x> Registro extra (o aluno já tem almoço ou lanche nesse dia)</label>' : ''}`,
       botoes: [{ texto: 'Cancelar' }, { texto: 'Registrar', classe: 'primario', acao: async (fechar, el) => {
         const aid = idDoSeletor(el); if (!aid) { aviso('Escolha um aluno da lista.', 'erro'); return false; }
         try {
           const r = await api('registrar_refeicao', { p_id: uuid(), p_aluno_id: aid, p_registrado_em: paraISO($('[data-dh]', el).value),
             p_metodo: 'manual', p_tem_foto: false, p_justificativa: $('[data-j]', el).value, p_extra: !!$('[data-x]', el)?.checked, p_tipo: $('[data-tp]', el).value });
           if (r.status === 'ok') { aviso(`Registrado: ${r.nome} às ${r.hora}.`, 'ok'); fechar(); carregar(); }
-          else if (r.status === 'duplicado') aviso(`Já existe ${r.tipo === 'lanche' ? 'lanche' : 'refeição'} nesse dia às ${r.hora}. ${admin ? 'Marque "registro extra" se for o caso.' : ''}`, 'erro');
+          else if (r.status === 'duplicado') aviso(`Já existe ${r.tipo === 'lanche' ? 'lanche' : 'almoço'} nesse dia às ${r.hora}. ${admin ? 'Marque "registro extra" se for o caso.' : ''}`, 'erro');
           else if (r.status === 'justificativa_obrigatoria') aviso('Escreva a justificativa (mínimo 5 caracteres).', 'erro');
           else aviso(r.status, 'erro');
         } catch (e) { aviso(e.message, 'erro'); }

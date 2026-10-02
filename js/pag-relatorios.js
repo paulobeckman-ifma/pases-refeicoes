@@ -12,14 +12,16 @@ export async function render(el, { cabecalho, perfil }) {
   const cursos = [...new Set(alunos.map((a) => a.curso).filter(Boolean))].sort();
   const niveis = [...new Set(alunos.map((a) => a.nivel).filter(Boolean))].sort();
   const turmas = [...new Set(alunos.map((a) => turmaDe(a.matricula)).filter(Boolean))].sort();
-  let periodo = null, bruto = [], R = [], aba = sessionStorage.getItem('pases_rel_aba') || 'resumo';
+  const admin = perfil === 'admin';
+  let periodo = null, bruto = [], R = [], aba = sessionStorage.getItem('pases_rel_aba') || 'resumo', fin = null;
+  if (aba === 'financeiro' && !admin) aba = 'resumo';
   let ordem = { chave: 'total', desc: true };
 
   el.innerHTML = cabecalho('Relatórios', 'Resumos por período, aluno, curso, dia e horário. Exporte em CSV (abre no Excel) ou imprima.',
     `<label class="check" title="Acrescenta à impressão a lista de todos os registros do período filtrado"><input type="checkbox" id="rel-det"> Incluir registros detalhados na impressão</label><button class="btn" id="rel-imp">${ico('imprimir')} Imprimir</button><button class="btn" id="rel-csv">${ico('baixar')} Exportar CSV desta aba</button>`) + `
     <div class="barra-filtros">
       <div class="linha-flex" id="rel-periodo"></div>
-      <label class="campo"><span>Tipo</span><select id="rel-tipo"><option value="">Refeição e lanche</option><option value="refeicao">Só refeição</option><option value="lanche">Só lanche</option></select></label>
+      <label class="campo"><span>Tipo</span><select id="rel-tipo"><option value="">Almoço e lanche</option><option value="refeicao">Só almoço</option><option value="lanche">Só lanche</option></select></label>
       <label class="campo"><span>Turma</span><select id="rel-turma"><option value="">Todas</option>${turmas.map((t) => `<option>${esc(t)}</option>`).join('')}</select></label>
       <label class="campo"><span>Curso</span><select id="rel-curso"><option value="">Todos</option>${cursos.map((c) => `<option>${esc(c)}</option>`).join('')}</select></label>
       <label class="campo"><span>Nível</span><select id="rel-nivel"><option value="">Todos</option>${niveis.map((c) => `<option>${esc(c)}</option>`).join('')}</select></label>
@@ -28,7 +30,7 @@ export async function render(el, { cabecalho, perfil }) {
     </div>
     <div class="so-impressao"><h2 id="rel-titulo-imp"></h2></div>
     <div class="abas" id="rel-abas">
-      ${[['resumo', 'Resumo'], ['aluno', 'Por aluno'], ['turma', 'Por turma'], ['curso', 'Por curso'], ['dia', 'Por dia'], ['horario', 'Por horário'], ['ocorrencias', 'Ocorrências']]
+      ${[['resumo', 'Resumo'], ['aluno', 'Por aluno'], ['turma', 'Por turma'], ['curso', 'Por curso'], ['dia', 'Por dia'], ['horario', 'Por horário'], ['ocorrencias', 'Ocorrências'], ...(admin ? [['financeiro', 'Financeiro']] : [])]
         .map(([k, t]) => `<button data-aba="${k}" class="${k === aba ? 'ativo' : ''}">${t}</button>`).join('')}
     </div>
     <div id="rel-corpo"><div class="vazio">Carregando…</div></div>
@@ -105,22 +107,32 @@ export async function render(el, { cabecalho, perfil }) {
   function desenhar() {
     $$('#rel-abas button').forEach((b) => b.classList.toggle('ativo', b.dataset.aba === aba));
     const c = $('#rel-corpo');
+    // aba Financeiro (só administrador): não usa os filtros do relatório; o módulo é carregado à parte
+    const ehFin = aba === 'financeiro' && admin;
+    el.querySelector('.barra-filtros').classList.toggle('oculto', ehFin);
+    $('#rel-det').closest('label').classList.toggle('oculto', ehFin);
+    if (ehFin) {
+      c.innerHTML = '<div class="vazio">Carregando…</div>';
+      import('./pag-financeiro.js').then((m) => { fin = m; if (aba === 'financeiro') return m.render(c); })
+        .catch((e) => { c.innerHTML = `<div class="caixa erro-caixa">${esc(e.message || e)}</div>`; });
+      return;
+    }
     if (aba === 'resumo') c.innerHTML = resumo();
     else if (aba === 'aluno') { c.innerHTML = `<div class="barra-filtros"><label class="campo" style="min-width:240px"><span>Buscar</span><input type="search" id="rel-busca" placeholder="Nome ou matrícula"></label>
         <label class="campo"><span>Mostrar</span><select id="rel-mostrar"><option value="">Todos os ativos e atendidos</option><option value="zero">Só quem NÃO compareceu</option><option value="baixa">Frequência abaixo de 50%</option><option value="alta">Frequência de 80% ou mais</option></select></label></div><div id="rel-tab-aluno"></div>`;
       $('#rel-busca').oninput = debounce(desenharAlunos, 200); $('#rel-mostrar').onchange = desenharAlunos; desenharAlunos(); }
-    else if (aba === 'curso' || aba === 'turma') c.innerHTML = tabelaHtml([aba === 'curso' ? 'Curso' : 'Turma', 'Ativos', 'Atendidos', 'Registros', 'Refeição', 'Lanche', 'Média por aluno atendido', 'Refeição fora do horário', 'Sem foto'],
+    else if (aba === 'curso' || aba === 'turma') c.innerHTML = tabelaHtml([aba === 'curso' ? 'Curso' : 'Turma', 'Ativos', 'Atendidos', 'Registros', 'Almoço', 'Lanche', 'Média por aluno atendido', 'Almoço fora do horário', 'Sem foto'],
       (aba === 'curso' ? tabelaCurso() : tabelaTurma()).map((x) => [esc(x.curso), x.ativos, `${x.atendidos} <small class="mudo">(${fmtPct(x.atendidos, x.ativos)})</small>`, `<b>${x.total}</b>`, x.refeicao, x.lanche, x.media.toFixed(1).replace('.', ','), x.fora, x.semfoto]), [1, 2, 3, 4, 5, 6, 7, 8]);
     else if (aba === 'dia') {
       const t = tabelaDia();
       c.innerHTML = `<div class="cartao" style="margin-bottom:16px"><h2>Atendimentos por dia</h2>${barras(t.map((x) => ({ r: fmtDataCurta(x.data), v: x.total, dica: `${DIAS_CURTO[diaSemanaNum(x.data)]} ${fmtData(x.data)}: ${x.total}` })), { titulo: 'Atendimentos por dia' })}</div>` +
-        tabelaHtml(['Data', 'Dia', 'Registros', 'Refeição', 'Lanche', 'Facial', 'CPF', 'Manual', 'Fora do horário', 'Sem foto', 'Primeiro', 'Último'],
+        tabelaHtml(['Data', 'Dia', 'Registros', 'Almoço', 'Lanche', 'Facial', 'CPF', 'Manual', 'Fora do horário', 'Sem foto', 'Primeiro', 'Último'],
           t.map((x) => [fmtData(x.data), x.dia, `<b>${x.total}</b>`, x.refeicao, x.lanche, x.facial, x.cpf, x.manual, x.fora, x.semfoto ? `<span class="selo vermelho">${x.semfoto}</span>` : 0, x.primeiro, x.ultimo]), [2, 3, 4, 5, 6, 7, 8, 9]);
     } else if (aba === 'horario') {
       const t = tabelaHorario();
       c.innerHTML = `<div class="cartao" style="margin-bottom:16px"><h2>Distribuição por horário (faixas de 15 minutos)</h2>${barras(t.map((x) => ({ r: x.inicio, v: x.total, classe: x.fora ? 'fora' : x.soLanche ? 'lanche' : '', dica: `${x.faixa}: ${x.total}${x.lanche ? ` (${x.lanche} lanche)` : ''}` })), { titulo: 'Por horário' })}
-        <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário (${esc(cfg.horario_inicio)}–${esc(cfg.horario_fim)})</span><span><i style="background:#e0a33a"></i>refeição fora do horário</span><span><i style="background:#3b7dd8"></i>lanche</span></div></div>` +
-        tabelaHtml(['Faixa', 'Registros', 'Lanche', '% do período', 'Situação'], t.filter((x) => x.total).map((x) => [x.faixa, x.total, x.lanche, fmtPct(x.total, R.length), x.fora ? '<span class="selo ambar">refeição fora do horário</span>' : x.soLanche ? '<span class="selo azul">lanche</span>' : '<span class="selo verde">dentro</span>']), [1, 2, 3]);
+        <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário (${esc(cfg.horario_inicio)}–${esc(cfg.horario_fim)})</span><span><i style="background:#e0a33a"></i>almoço fora do horário</span><span><i style="background:#3b7dd8"></i>lanche</span></div></div>` +
+        tabelaHtml(['Faixa', 'Registros', 'Lanche', '% do período', 'Situação'], t.filter((x) => x.total).map((x) => [x.faixa, x.total, x.lanche, fmtPct(x.total, R.length), x.fora ? '<span class="selo ambar">almoço fora do horário</span>' : x.soLanche ? '<span class="selo azul">lanche</span>' : '<span class="selo verde">dentro</span>']), [1, 2, 3]);
     } else if (aba === 'ocorrencias') {
       const t = ocorrencias();
       c.innerHTML = `<p class="mudo" style="margin-top:0">Registros sem foto, fora do horário, manuais, extras ou com observação.</p>` +
@@ -138,10 +150,10 @@ export async function render(el, { cabecalho, perfil }) {
       return { r: DIAS_CURTO[w], v: ds ? Math.round(n / ds) : 0, dica: `${DIAS_SEMANA[w]}: média de ${ds ? (n / ds).toFixed(1) : 0} por dia (${ds} dia(s))` }; }).filter((x, i) => i < 5 || x.v);
     const pd = tabelaDia();
     return `<div class="kpis">
-        <div class="kpi"><span>Registros</span><b>${fmtNum(R.length)}</b><small>${R.filter((r) => r.tp !== 'lanche').length} refeição · ${R.filter((r) => r.tp === 'lanche').length} lanche · ${dias.length} dia(s)</small></div>
+        <div class="kpi"><span>Registros</span><b>${fmtNum(R.length)}</b><small>${R.filter((r) => r.tp !== 'lanche').length} almoço · ${R.filter((r) => r.tp === 'lanche').length} lanche · ${dias.length} dia(s)</small></div>
         <div class="kpi"><span>Média por dia</span><b>${dias.length ? (R.length / dias.length).toFixed(1).replace('.', ',') : 0}</b><small>nos dias com atendimento</small></div>
         <div class="kpi"><span>Alunos atendidos</span><b>${atendidos}</b><small>${fmtPct(atendidos, ativosN)} dos ${ativosN} ativos</small></div>
-        <div class="kpi ${fora ? 'kpi-aviso' : ''}"><span>Refeição fora do horário</span><b>${fora}</b><small>${fmtPct(fora, R.length)} · janela ${esc(cfg.horario_inicio)}–${esc(cfg.horario_fim)}</small></div>
+        <div class="kpi ${fora ? 'kpi-aviso' : ''}"><span>Almoço fora do horário</span><b>${fora}</b><small>${fmtPct(fora, R.length)} · janela ${esc(cfg.horario_inicio)}–${esc(cfg.horario_fim)}</small></div>
         <div class="kpi ${sf ? 'kpi-alerta' : ''}"><span>Sem foto</span><b>${sf}</b><small>${fmtPct(sf, R.length)} dos registros</small></div>
         <div class="kpi"><span>Reconhecimento facial</span><b>${fmtPct(fac, R.length)}</b><small>${fac} facial · ${R.length - fac - man} CPF · ${man} manual</small></div>
       </div>
@@ -150,7 +162,7 @@ export async function render(el, { cabecalho, perfil }) {
         <div class="cartao"><h2>Média por dia da semana</h2>${barras(porSemana, { titulo: 'Média por dia da semana' })}</div>
       </div>
       <div class="cartao"><h2>Distribuição por horário</h2>${barras(tabelaHorario().map((x) => ({ r: x.inicio, v: x.total, classe: x.fora ? 'fora' : x.soLanche ? 'lanche' : '', dica: `${x.faixa}: ${x.total}${x.lanche ? ` (${x.lanche} lanche)` : ''}` })), { titulo: 'Por horário', altura: 180 })}
-        <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário</span><span><i style="background:#e0a33a"></i>refeição fora do horário</span><span><i style="background:#3b7dd8"></i>lanche</span></div></div>`;
+        <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário</span><span><i style="background:#e0a33a"></i>almoço fora do horário</span><span><i style="background:#3b7dd8"></i>lanche</span></div></div>`;
   }
 
   function desenharAlunos() {
@@ -161,8 +173,8 @@ export async function render(el, { cabecalho, perfil }) {
     if (mostrar === 'alta') t = t.filter((x) => x.freq >= 80);
     const k = ordem.chave; t.sort((a, b) => (typeof a[k] === 'string' ? a[k].localeCompare(b[k]) : a[k] - b[k]) * (ordem.desc ? -1 : 1));
     const dias = diasFuncionamento().length;
-    $('#rel-tab-aluno').innerHTML = `<p class="mudo pequeno" style="margin-top:0">${t.length} aluno(s). Frequência = refeições ÷ ${dias} dia(s) com atendimento no período.</p>` +
-      tabelaHtml([['nome', 'Aluno'], ['turma', 'Turma'], ['total', 'Registros'], ['refeicao', 'Refeição'], ['lanche', 'Lanche'], ['freq', 'Frequência'], ['fora', 'Fora do horário'], ['semfoto', 'Sem foto'], ['facial', 'Facial'], ['ultima', 'Última']],
+    $('#rel-tab-aluno').innerHTML = `<p class="mudo pequeno" style="margin-top:0">${t.length} aluno(s). Frequência = registros ÷ ${dias} dia(s) com atendimento no período.</p>` +
+      tabelaHtml([['nome', 'Aluno'], ['turma', 'Turma'], ['total', 'Registros'], ['refeicao', 'Almoço'], ['lanche', 'Lanche'], ['freq', 'Frequência'], ['fora', 'Fora do horário'], ['semfoto', 'Sem foto'], ['facial', 'Facial'], ['ultima', 'Última']],
         t.map((x) => [`${esc(x.nome)}${x.ativo ? '' : ' <span class="selo">inativo</span>'}<br><small class="mudo">${esc(x.matricula)}</small>`, `<b class="pequeno">${esc(x.turma)}</b><br><span class="pequeno mudo">${esc(x.curso)}</span>`,
           `<b>${x.total}</b>`, x.refeicao, x.lanche, `<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><span style="display:inline-block;width:60px;height:6px;border-radius:3px;background:#eef1f0;overflow:hidden"><span style="display:block;height:100%;width:${Math.min(100, x.freq)}%;background:${x.freq < 50 ? '#e0a33a' : 'var(--verde)'}"></span></span>${String(x.freq).replace('.', ',')}%</div>`,
           x.fora, x.semfoto ? `<span class="selo vermelho">${x.semfoto}</span>` : 0, x.facial, x.ultima ? fmtData(x.ultima) : '<span class="mudo">nunca</span>']), [2, 3, 4, 5, 6, 7, 8], null, t.map((x) => x.id));
@@ -172,7 +184,7 @@ export async function render(el, { cabecalho, perfil }) {
 
   function historico(id) {
     const a = A.get(id), rs = R.filter((r) => r.a === id);
-    modal({ titulo: `${a.nome} · ${periodo.rotulo}`, largo: true, corpo: `<p class="mudo" style="margin:0">${esc(a.matricula || '')} · ${esc(a.curso || '')} · ${rs.length} refeição(ões) no período</p>` +
+    modal({ titulo: `${a.nome} · ${periodo.rotulo}`, largo: true, corpo: `<p class="mudo" style="margin:0">${esc(a.matricula || '')} · ${esc(a.curso || '')} · ${rs.length} registro(s) no período</p>` +
       tabelaHtml(['Data', 'Dia', 'Hora', 'Tipo', 'Método', 'Foto', 'Horário'], rs.slice().reverse().map((r) => [fmtData(r.dt), DIAS_SEMANA[diaSemanaNum(r.dt)], r.h.slice(0, 5), TIPO[r.tp || 'refeicao'], METODO[r.m],
         r.fs === 'sem_foto' ? `<span class="selo vermelho">sem foto</span> <small>${esc(r.j || '')}</small>` : 'ok', r.tp === 'lanche' ? 'livre' : r.dh ? 'dentro' : '<span class="selo ambar">fora</span>']), []) });
   }
@@ -185,6 +197,7 @@ export async function render(el, { cabecalho, perfil }) {
   }
 
   function exportar() {
+    if (aba === 'financeiro') return fin?.exportar();
     const nome = `pases_${aba}_${periodo.ini}_a_${periodo.fim}`;
     if (aba === 'aluno' || aba === 'resumo') baixarCsv(nome, ['aluno', 'matricula', 'turma', 'curso', 'ativo', 'registros', 'refeicao', 'lanche', 'frequencia_%', 'fora_do_horario', 'sem_foto', 'facial', 'ultima'],
       tabelaAluno().sort((a, b) => a.nome.localeCompare(b.nome)).map((x) => [x.nome, x.matricula, x.turma, x.curso, x.ativo ? 'sim' : 'não', x.total, x.refeicao, x.lanche, String(x.freq).replace('.', ','), x.fora, x.semfoto, x.facial, fmtData(x.ultima)]));

@@ -312,7 +312,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
   function mensagemConfirmar(a, distancia) {
     const troca = S.tipoSel !== modalidadeDe(a);
     mensagem(`${a.n} · ${a.m || ''} · ${TIPO[S.tipoSel]}${troca ? ` (troca: cadastro é ${TIPO[modalidadeDe(a)]})` : ''}`,
-      `${distancia != null ? `semelhança ${semelhanca(distancia)}% · ` : 'pelo CPF · '}1 refeição · 2 lanche · ENTER confirma · ESC se não for ele(a)`);
+      `${distancia != null ? `semelhança ${semelhanca(distancia)}% · ` : 'pelo CPF · '}1 almoço · 2 lanche · ENTER confirma · ESC se não for ele(a)`);
   }
   // antes do ENTER o aluno pode trocar: tecla 1 = refeição, 2 = lanche (sem escolha, vale o cadastro)
   function escolherTipo(t) {
@@ -646,9 +646,9 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     S.cpf = ''; desenharCpf();
     const a = d.aluno, nome = esc(a?.n || ''), mat = esc(a?.m || '');
     const T = {
-      ok: { classe: d.dentro === false || d.semFoto ? 'aviso' : 'ok', icone: d.dentro === false || d.semFoto ? 'alerta' : 'check', titulo: d.tipo === 'lanche' ? 'Lanche registrado' : 'Refeição registrada',
+      ok: { classe: d.dentro === false || d.semFoto ? 'aviso' : 'ok', icone: d.dentro === false || d.semFoto ? 'alerta' : 'check', titulo: d.tipo === 'lanche' ? 'Lanche registrado' : 'Almoço registrado',
         texto: `${nome} · ${mat}<br>às <b>${esc(d.hora)}</b>${d.dentro === false ? ` · <b>fora do horário</b> (${S.config.horario_inicio}–${S.config.horario_fim})` : ''}${d.semFoto ? '<br><b>Sem foto</b> (justificado)' : ''}${d.offline ? '<br>Sem internet: será enviado automaticamente.' : ''}${d.novaBase ? '<br><small>Foto de hoje salva como nova foto do cadastro.</small>' : ''}${d.observacao ? `<br><small style="color:var(--vermelho)">${esc(d.observacao)}</small>` : ''}` },
-      duplicado: { classe: 'erro', icone: 'x', titulo: 'Já registrado hoje', texto: `${nome}<br>${TIPO[d.tipo] || 'Registro'} às <b>${esc(d.hora || '')}</b>.<br><small>Vale uma refeição OU um lanche por dia.</small>` },
+      duplicado: { classe: 'erro', icone: 'x', titulo: 'Já registrado hoje', texto: `${nome}<br>${TIPO[d.tipo] || 'Registro'} às <b>${esc(d.hora || '')}</b>.<br><small>Vale um almoço OU um lanche por dia.</small>` },
       inativo: { classe: 'erro', icone: 'x', titulo: 'Cadastro inativo no PASES', texto: `${nome}<br>Encaminhe o aluno à assistência estudantil.` },
       nao_encontrado: { classe: 'erro', icone: 'x', titulo: 'CPF não encontrado', texto: 'Este CPF não está cadastrado no PASES. Confira os números ou procure a assistência estudantil.' },
       cpf_invalido: { classe: 'erro', icone: 'x', titulo: 'CPF inválido', texto: 'Os números digitados não formam um CPF válido. Digite novamente.' },
@@ -673,7 +673,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
   function desenharUltimos() { atualizarTopo(); if (rt) espelhar({ tipo: 'hoje', n: S.hoje.size, lista: S.ultimos.slice(0, 150) }); }
   function verHoje() {
     modal({ titulo: `Registros de hoje (${S.hoje.size})`, corpo: `<ul class="lista-hoje">${S.ultimos.slice(0, 200).map((u) => `<li class="${u.semFoto ? 'sem-foto' : ''}"><span class="hora">${esc(u.h)}</span>
-      <span class="nome">${esc(u.nome)}</span>${u.t === 'lanche' ? '<span class="selo azul">lanche</span>' : '<span class="selo verde">refeição</span>'}${u.semFoto ? '<span class="selo vermelho">sem foto</span>' : ''}${u.fora ? '<span class="selo ambar">fora</span>' : ''}${u.offline ? '<span class="selo">fila</span>' : ''}</li>`).join('')
+      <span class="nome">${esc(u.nome)}</span>${u.t === 'lanche' ? '<span class="selo azul">lanche</span>' : '<span class="selo verde">almoço</span>'}${u.semFoto ? '<span class="selo vermelho">sem foto</span>' : ''}${u.fora ? '<span class="selo ambar">fora</span>' : ''}${u.offline ? '<span class="selo">fila</span>' : ''}</li>`).join('')
       || '<li class="mudo">Nenhum registro ainda.</li>'}</ul>`, botoes: [{ texto: 'Fechar' }] });
   }
 
@@ -935,7 +935,7 @@ function montarApoio(raiz, { aoSair, disp, canalRt, ativo, aoAssumir }) {
   const tecAberto = (v) => { $('#a-tecpop', raiz).classList.toggle('oculto', !v); $('#a-tec', raiz).classList.toggle('ativo', v); };
   $('#a-tec', raiz).onclick = () => tecAberto($('#a-tecpop', raiz).classList.contains('oculto'));
   $('#a-total', raiz).onclick = () => modal({ titulo: `Registros de hoje (${nHoje})`, corpo: `<ul class="lista-hoje">${lista.map((u) => `<li class="${u.semFoto ? 'sem-foto' : ''}"><span class="hora">${esc(u.h)}</span>
-      <span class="nome">${esc(u.nome)}</span>${u.t === 'lanche' ? '<span class="selo azul">lanche</span>' : '<span class="selo verde">refeição</span>'}${u.semFoto ? '<span class="selo vermelho">sem foto</span>' : ''}${u.fora ? '<span class="selo ambar">fora</span>' : ''}${u.offline ? '<span class="selo">fila</span>' : ''}</li>`).join('') || '<li class="mudo">Nenhum registro ainda.</li>'}</ul>`, botoes: [{ texto: 'Fechar' }] });
+      <span class="nome">${esc(u.nome)}</span>${u.t === 'lanche' ? '<span class="selo azul">lanche</span>' : '<span class="selo verde">almoço</span>'}${u.semFoto ? '<span class="selo vermelho">sem foto</span>' : ''}${u.fora ? '<span class="selo ambar">fora</span>' : ''}${u.offline ? '<span class="selo">fila</span>' : ''}</li>`).join('') || '<li class="mudo">Nenhum registro ainda.</li>'}</ul>`, botoes: [{ texto: 'Fechar' }] });
   $('#a-registros', raiz).onclick = () => { location.hash = '#/registros'; };
   $('#a-semfoto', raiz).onclick = () => {
     modal({ titulo: 'Próximo registro sem foto', corpo: `<p style="margin:0">Justificativa (vale para o próximo registro feito no balcão principal):</p>

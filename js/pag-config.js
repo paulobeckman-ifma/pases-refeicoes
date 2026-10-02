@@ -59,7 +59,7 @@ export async function render(el, { cabecalho, perfil }) {
         <label class="campo"><span>Manter os últimos</span><select id="c-bk-manter">${[8, 13, 26, 52, 104].map((n) => `<option value="${n}" ${Number(cfg.backup?.manter ?? 26) === n ? 'selected' : ''}>${n} backups</option>`).join('')}</select></label>
         <button class="btn primario" id="c-bk-salvar" style="align-self:flex-end">Salvar agendamento</button>
       </div>
-      <p class="mudo pequeno">Cada backup gera, na pasta "backups" do Drive, um arquivo JSON completo (serve para restaurar o banco) e uma planilha legível com refeições, alunos e usuários. As fotos já ficam no Drive.</p>
+      <p class="mudo pequeno">Cada backup gera, na pasta "backups" do Drive, um arquivo JSON completo (serve para restaurar o banco) e uma planilha legível com registros, alunos e usuários. As fotos já ficam no Drive.</p>
       <h3 style="margin:14px 0 8px">Histórico</h3><div id="c-bk-hist" class="pequeno mudo">Carregando…</div></div>
 
     <div class="cartao"><h2>${ico('escudo')} Sistema</h2><dl class="dl pequeno">
@@ -100,7 +100,7 @@ export async function render(el, { cabecalho, perfil }) {
     const travados = fila.filter((i) => (i.falhas || 0) >= 30);
     $('#c-fila').innerHTML = `${fila.length} registro(s) deste computador aguardando envio ao servidor.` +
       (travados.length ? `<br><b style="color:var(--vermelho)">${travados.length} não conseguem ser enviados</b> (último erro: ${esc(travados[0].ultimoErro || '')}). Não limpe os dados do navegador deste computador; procure o suporte.` : '') +
-      (conf.length ? `<br>${conf.length} registro(s) feitos sem internet foram recusados pelo servidor ao sincronizar (ex.: aluno já tinha refeição no dia): ${conf.slice(0, 5).map((c) => `${esc(c.aluno || '')} (${esc(c.status)})`).join(', ')}` : '');
+      (conf.length ? `<br>${conf.length} registro(s) feitos sem internet foram recusados pelo servidor ao sincronizar (ex.: aluno já tinha registro no dia): ${conf.slice(0, 5).map((c) => `${esc(c.aluno || '')} (${esc(c.status)})`).join(', ')}` : '');
   })();
 
   if (!admin) return () => pararCamera(stream);

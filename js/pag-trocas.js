@@ -14,15 +14,15 @@ export async function render(el, { cabecalho, perfil }) {
   let periodo = null, regs = [], aba = 'padroes', padroes = [];
 
   el.innerHTML = cabecalho('Trocas',
-    'No balcão o aluno pode trocar a opção do dia (1 = refeição, 2 = lanche) antes do ENTER. Aqui ficam essas trocas e quem troca com frequência.',
+    'No balcão o aluno pode trocar a opção do dia (1 = almoço, 2 = lanche) antes do ENTER. Aqui ficam essas trocas e quem troca com frequência.',
     `<button class="btn" id="t-csv">${ico('baixar')} Exportar CSV</button>`) + `
     <div class="barra-filtros">
       <div class="linha-flex" id="t-periodo"></div>
       <label class="campo"><span>Padrão: mínimo de trocas</span><input type="number" id="t-min" min="1" max="60" value="3" style="width:90px"></label>
-      <label class="campo"><span>e % das refeições do aluno</span><input type="number" id="t-pct" min="1" max="100" value="50" style="width:90px"></label>
+      <label class="campo"><span>e % dos registros do aluno</span><input type="number" id="t-pct" min="1" max="100" value="50" style="width:90px"></label>
     </div>
     <div class="kpis" id="t-kpis"></div>
-    <div class="abas"><button data-aba="padroes" class="ativo">Padrões por aluno</button><button data-aba="lista">Refeições trocadas</button></div>
+    <div class="abas"><button data-aba="padroes" class="ativo">Padrões por aluno</button><button data-aba="lista">Registros trocados</button></div>
     <div id="t-corpo"></div>`;
 
   async function carregar() {
@@ -47,11 +47,11 @@ export async function render(el, { cabecalho, perfil }) {
     }).sort((x, y) => (y.padrao - x.padrao) || (y.trocas - x.trocas) || (y.perc - x.perc));
     const trocadas = regs.filter((r) => r.tr);
     $('#t-kpis').innerHTML = `
-      <div class="kpi"><span>Refeições no período</span><b>${regs.length}</b><small>${esc(periodo.rotulo)}</small></div>
+      <div class="kpi"><span>Registros no período</span><b>${regs.length}</b><small>${esc(periodo.rotulo)}</small></div>
       <div class="kpi kpi-aviso"><span>Com troca</span><b>${trocadas.length}</b><small>${regs.length ? Math.round((100 * trocadas.length) / regs.length) : 0}% do total</small></div>
-      <div class="kpi"><span>Refeição → lanche</span><b>${trocadas.filter((r) => r.tp === 'lanche').length}</b><small>cadastro refeição, comeu lanche</small></div>
-      <div class="kpi"><span>Lanche → refeição</span><b>${trocadas.filter((r) => r.tp !== 'lanche').length}</b><small>cadastro lanche, comeu refeição</small></div>
-      <div class="kpi kpi-alerta"><span>Padrão identificado</span><b>${padroes.filter((p) => p.padrao).length}</b><small>${min}+ trocas e ${pct}%+ das refeições</small></div>`;
+      <div class="kpi"><span>Almoço → lanche</span><b>${trocadas.filter((r) => r.tp === 'lanche').length}</b><small>cadastro almoço, comeu lanche</small></div>
+      <div class="kpi"><span>Lanche → almoço</span><b>${trocadas.filter((r) => r.tp !== 'lanche').length}</b><small>cadastro lanche, comeu almoço</small></div>
+      <div class="kpi kpi-alerta"><span>Padrão identificado</span><b>${padroes.filter((p) => p.padrao).length}</b><small>${min}+ trocas e ${pct}%+ dos registros</small></div>`;
     desenhar();
   }
 
@@ -68,7 +68,7 @@ export async function render(el, { cabecalho, perfil }) {
           <td class="num">${p.ultima ? fmtData(p.ultima) : ''}</td>
           <td class="nao-imprimir">${admin && p.pref !== p.atual ? `<button class="btn pequeno ${p.padrao ? 'primario' : ''}" data-mudar="${p.a}" data-para="${p.pref}">${ico('atualizar')} Mudar cadastro para ${TIPO[p.pref]}</button>` : ''}</td></tr>`).join('')
         || '<tr><td colspan="7" class="vazio">Nenhuma troca no período.</td></tr>'}</tbody></table></div>
-        <p class="pequeno mudo">"Padrão" = aluno que trocou pelo menos o mínimo de vezes e em pelo menos a porcentagem indicada das refeições dele no período. ${admin ? 'Mudar o cadastro vale a partir do próximo registro; as trocas anteriores continuam no histórico.' : 'Só o administrador pode mudar o cadastro.'}</p>`;
+        <p class="pequeno mudo">"Padrão" = aluno que trocou pelo menos o mínimo de vezes e em pelo menos a porcentagem indicada dos registros dele no período. ${admin ? 'Mudar o cadastro vale a partir do próximo registro; as trocas anteriores continuam no histórico.' : 'Só o administrador pode mudar o cadastro.'}</p>`;
     } else {
       const lista = regs.filter((r) => r.tr).reverse();
       $('#t-corpo').innerHTML = `<div class="tabela-wrap"><table class="tabela"><thead><tr><th>Data</th><th>Hora</th><th>Aluno</th><th>Turma / curso</th><th>Cadastro</th><th>Comeu</th><th>Atendente</th></tr></thead><tbody>
@@ -76,7 +76,7 @@ export async function render(el, { cabecalho, perfil }) {
           <td>${esc(a.nome || '?')}<br><small class="mudo">${esc(a.matricula || '')}</small></td>
           <td class="pequeno"><b>${esc(turmaDe(a.matricula))}</b><br>${esc(a.curso || '')}</td>
           <td>${tipo(r.mc)}</td><td>${tipo(r.tp)}</td><td class="pequeno">${esc(r.op || '')}</td></tr>`; }).join('')
-        || '<tr><td colspan="7" class="vazio">Nenhuma refeição trocada no período.</td></tr>'}</tbody></table></div>`;
+        || '<tr><td colspan="7" class="vazio">Nenhum registro trocado no período.</td></tr>'}</tbody></table></div>`;
     }
   }
 
@@ -86,7 +86,7 @@ export async function render(el, { cabecalho, perfil }) {
     const b = e.target.closest('[data-mudar]'); if (!b) return;
     const p = padroes.find((x) => x.a === b.dataset.mudar), para = b.dataset.para;
     const motivo = await pedirTexto('Mudar modalidade do cadastro', `${p.al.nome}: ${TIPO[p.atual]} → ${TIPO[para]}. Motivo (fica na auditoria)`,
-      { minimo: 3, valor: `Trocou ${p.trocas} de ${p.total} refeições (${p.perc}%) em ${periodo.rotulo}` });
+      { minimo: 3, valor: `Trocou ${p.trocas} de ${p.total} registros (${p.perc}%) em ${periodo.rotulo}` });
     if (!motivo) return;
     try {
       await api('aluno_modalidade_definir', { p_aluno_id: p.a, p_modalidade: para, p_motivo: motivo });

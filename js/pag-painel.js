@@ -51,15 +51,15 @@ export async function render(el, { cabecalho, perfil }) {
       perfil !== 'consulta' ? `<a class="btn primario" href="#/balcao">${ico('balcao')} Abrir balcão</a>` : '') + `
     ${alertas.map((a) => `<div class="caixa aviso-caixa" style="margin-bottom:10px">${ico('alerta', 'nao-imprimir')} ${a}</div>`).join('')}
     <div class="kpis">
-      <div class="kpi"><span>Atendimentos hoje</span><b>${fmtNum(hoje.length)}</b><small>${hoje.filter((r) => r.tp !== 'lanche').length} refeição · ${hoje.filter((r) => r.tp === 'lanche').length} lanche · ${fmtPct(hoje.length, ativos)} dos ${ativos} ativos</small></div>
+      <div class="kpi"><span>Atendimentos hoje</span><b>${fmtNum(hoje.length)}</b><small>${hoje.filter((r) => r.tp !== 'lanche').length} almoço · ${hoje.filter((r) => r.tp === 'lanche').length} lanche · ${fmtPct(hoje.length, ativos)} dos ${ativos} ativos</small></div>
       <div class="kpi ${fora ? 'kpi-aviso' : ''}"><span>Fora do horário</span><b>${fora}</b><small>${fmtPct(fora, hoje.length)} dos registros</small></div>
       <div class="kpi ${semFoto ? 'kpi-alerta' : ''}"><span>Sem foto</span><b>${semFoto}</b><small>todos com justificativa</small></div>
       <div class="kpi"><span>Reconhecimento facial</span><b>${fmtPct(facial, hoje.length)}</b><small>${facial} de ${hoje.length} registros</small></div>
     </div>
     <div class="duas-col">
       <div class="cartao"><h2>Atendimentos por dia · últimos 14 dias</h2>${barras(porDia, { titulo: 'Atendimentos por dia' })}</div>
-      <div class="cartao"><h2>Hoje, por horário (15 min)</h2>${barras(porFaixa, { titulo: 'Refeições por faixa de horário' })}
-        <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário</span><span><i style="background:#e0a33a"></i>refeição fora do horário</span><span><i style="background:#3b7dd8"></i>lanche</span></div></div>
+      <div class="cartao"><h2>Hoje, por horário (15 min)</h2>${barras(porFaixa, { titulo: 'Registros por faixa de horário' })}
+        <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário</span><span><i style="background:#e0a33a"></i>almoço fora do horário</span><span><i style="background:#3b7dd8"></i>lanche</span></div></div>
     </div>
     <div class="cartao"><div class="linha-flex" style="margin-bottom:10px"><h2>Últimos registros de hoje</h2><span class="espaco"></span><a href="#/registros" class="btn pequeno">Ver todos</a></div>
       ${hoje.length ? `<div class="tabela-wrap"><table class="tabela"><thead><tr><th>Hora</th><th>Aluno</th><th>Curso</th><th>Método</th><th>Situação</th></tr></thead><tbody>
@@ -67,6 +67,6 @@ export async function render(el, { cabecalho, perfil }) {
         <td class="num">${r.h.slice(0, 5)}</td><td>${esc(a.nome)}<br><small class="mudo">${esc(a.matricula || '')}</small></td><td>${esc(a.curso || '')}</td>
         <td>${r.m === 'facial' ? 'Facial' : r.m === 'cpf' ? 'CPF' : 'Manual'}</td>
         <td>${r.fs === 'sem_foto' ? `<span class="selo vermelho">SEM FOTO</span> <small>${esc(r.j || '')}</small>` : r.fs === 'pendente' ? '<span class="selo">foto enviando</span>' : '<span class="selo verde">com foto</span>'}
-          ${r.dh ? '' : '<span class="selo ambar">fora do horário</span>'}</td></tr>`; }).join('')}</tbody></table></div>` : '<div class="vazio">Nenhuma refeição registrada hoje.</div>'}
+          ${r.dh ? '' : '<span class="selo ambar">fora do horário</span>'}</td></tr>`; }).join('')}</tbody></table></div>` : '<div class="vazio">Nenhum registro hoje.</div>'}
     </div>`;
 }

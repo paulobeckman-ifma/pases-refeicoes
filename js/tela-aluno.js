@@ -55,10 +55,10 @@ video.addEventListener('loadedmetadata', desenhar);
 function mostrar(html, classe = '') { painel.className = 'painel ' + classe; painel.innerHTML = html; }
 // opções do dia: o aluno pode trocar com 1 (refeição) ou 2 (lanche) antes do ENTER
 const escolha = (t, md) => `<div class="escolha">
-    <div class="opcao ${t !== 'lanche' ? 'sel' : ''}"><span class="tecla">1</span>Refeição</div>
+    <div class="opcao ${t !== 'lanche' ? 'sel' : ''}"><span class="tecla">1</span>Almoço</div>
     <div class="opcao lanche ${t === 'lanche' ? 'sel' : ''}"><span class="tecla">2</span>Lanche</div></div>
-  <p class="escolha-nota">${md && t !== md ? `<b>Troca:</b> seu cadastro é de ${md === 'lanche' ? 'lanche' : 'refeição'}` : 'Conforme seu cadastro · tecle 1 ou 2 para mudar'}</p>`;
-const modalidade = (t) => `<div class="modalidade ${t === 'lanche' ? 'lanche' : ''}"><small>Beneficiário de</small>${t === 'lanche' ? 'Lanche' : 'Refeição'}</div>`;
+  <p class="escolha-nota">${md && t !== md ? `<b>Troca:</b> seu cadastro é de ${md === 'lanche' ? 'lanche' : 'almoço'}` : 'Conforme seu cadastro · tecle 1 ou 2 para mudar'}</p>`;
+const modalidade = (t) => `<div class="modalidade ${t === 'lanche' ? 'lanche' : ''}"><small>Beneficiário de</small>${t === 'lanche' ? 'Lanche' : 'Almoço'}</div>`;
 
 function estadoPadrao() {
   imagem(false);
@@ -111,7 +111,7 @@ function aoResultado(m) {
       <div class="nome">${esc(m.nome)}</div><div class="sub">Matrícula ${esc(m.matricula || '')} · ${esc(m.hora || '')}</div>
       ${m.dentro === false ? `<p class="grande" style="color:#ffd98f">Registrado fora do horário (${esc(m.inicio)} às ${esc(m.fim)})</p>` : `<p class="grande">${m.tipoReg === 'lanche' ? 'Bom lanche!' : 'Bom almoço!'}</p>`}`;
   } else if (m.status === 'duplicado') {
-    corpo = `<div class="nome">${esc(m.nome || '')}</div><p class="grande">Você já teve ${m.tipoReg === 'lanche' ? 'lanche' : 'refeição'} registrado hoje às <b>${esc(m.hora || '')}</b>.</p><p>Vale uma refeição OU um lanche por dia.</p>`;
+    corpo = `<div class="nome">${esc(m.nome || '')}</div><p class="grande">Você já teve ${m.tipoReg === 'lanche' ? 'lanche' : 'almoço'} registrado hoje às <b>${esc(m.hora || '')}</b>.</p><p>Vale um almoço OU um lanche por dia.</p>`;
   } else if (m.status === 'nao_encontrado') {
     corpo = `<p class="grande">CPF não encontrado no PASES.</p><p>Confira os números ou procure a assistência estudantil.</p>`;
   } else if (m.status === 'cpf_invalido') {
