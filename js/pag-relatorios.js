@@ -1,9 +1,9 @@
 // Relatórios: resumo, por aluno (frequência e ausências), por curso, por dia e por horário
 // (o financeiro saiu daqui e virou módulo próprio: pag-financeiro.js)
-import { $, $$, esc, ico, baixarCsv, fmtData, fmtDataCurta, DIAS_SEMANA, DIAS_CURTO, diaSemanaNum, addDias, fmtPct, pct, fmtNum, normalizar, debounce, modal, turmaDe, fmtCpf, TIPO } from './util.js';
+import { $, $$, esc, ico, baixarCsv, fmtData, fmtDataCurta, DIAS_SEMANA, DIAS_CURTO, diaSemanaNum, addDias, diasEntre, inicioSemana, hojeISO, horaDe, MESES, fmtPct, pct, fmtNum, normalizar, debounce, modal, turmaDe, fmtCpf, TIPO } from './util.js';
 import { api } from './api.js';
 import * as D from './dados.js';
-import { barras } from './graficos.js';
+import { barras, colunas, barrasH, legenda } from './graficos.js';
 
 const METODO = { facial: 'Facial', cpf: 'CPF', manual: 'Manual' };
 const ABAS = [['resumo', 'Resumo'], ['aluno', 'Por aluno'], ['turma', 'Por turma'], ['curso', 'Por curso'], ['dia', 'Por dia'], ['horario', 'Por horário'], ['ocorrencias', 'Ocorrências']];
@@ -14,7 +14,7 @@ export async function render(el, { cabecalho, perfil }) {
   const cursos = [...new Set(alunos.map((a) => a.curso).filter(Boolean))].sort();
   const niveis = [...new Set(alunos.map((a) => a.nivel).filter(Boolean))].sort();
   const turmas = [...new Set(alunos.map((a) => turmaDe(a.matricula)).filter(Boolean))].sort();
-  let periodo = null, bruto = [], R = [], aba = sessionStorage.getItem('pases_rel_aba') || 'resumo';
+  let periodo = null, bruto = [], R = [], refBruto = [], REF = [], refIni = '', aba = sessionStorage.getItem('pases_rel_aba') || 'resumo';
   if (!ABAS.some(([k]) => k === aba)) aba = 'resumo';
   let ordem = { chave: 'total', desc: true };
 
@@ -38,7 +38,13 @@ export async function render(el, { cabecalho, perfil }) {
 
   async function carregar() {
     $('#rel-corpo').innerHTML = '<div class="vazio">Carregando…</div>';
-    bruto = await api('refeicoes_listar', { p_ini: periodo.ini, p_fim: periodo.fim });
+    // além do período pedido, busca os dias anteriores: servem de base para as comparações do Resumo
+    const n = diasEntre(periodo.ini, periodo.fim) + 1, janela = Math.min(120, Math.max(28, n));
+    refIni = addDias(periodo.ini, -janela);
+    [bruto, refBruto] = await Promise.all([
+      api('refeicoes_listar', { p_ini: periodo.ini, p_fim: periodo.fim }),
+      api('refeicoes_listar', { p_ini: refIni, p_fim: addDias(periodo.ini, -1) }).catch(() => [])
+    ]);
     aplicarFiltros();
   }
   function alunosFiltrados() {
@@ -47,7 +53,8 @@ export async function render(el, { cabecalho, perfil }) {
   }
   function aplicarFiltros() {
     const ids = new Set(alunosFiltrados().map((a) => a.id)), met = $('#rel-metodo').value, uteis = $('#rel-dias').value === 'uteis', tipo = $('#rel-tipo').value;
-    R = bruto.filter((r) => ids.has(r.a) && (!met || r.m === met) && (!uteis || diaSemanaNum(r.dt) <= 5) && (!tipo || (r.tp || 'refeicao') === tipo));
+    const passa = (r) => ids.has(r.a) && (!met || r.m === met) && (!uteis || diaSemanaNum(r.dt) <= 5) && (!tipo || (r.tp || 'refeicao') === tipo);
+    R = bruto.filter(passa); REF = refBruto.filter(passa);
     const filtros = [tipo && TIPO[tipo], $('#rel-turma').value && `turma ${$('#rel-turma').value}`, $('#rel-curso').value, $('#rel-nivel').value].filter(Boolean).join(' · ');
     $('#rel-titulo-imp').textContent = `PASES Refeições · ${periodo.rotulo} (${fmtData(periodo.ini)} a ${fmtData(periodo.fim)})${filtros ? ' · ' + filtros : ''}`;
     desenhar();
@@ -132,27 +139,135 @@ export async function render(el, { cabecalho, perfil }) {
     }
   }
 
+  // ---------------------------------------------------------------- resumo: a análise muda conforme o tamanho do período
+  const VERDE = 'var(--verde)', AZUL = '#3b7dd8', AMBAR = '#e0a33a', CINZA = '#8a9590';
+  const SERIES = [{ nome: 'almoço', cor: VERDE }, { nome: 'lanche', cor: AZUL }];
+  const conta = (l) => { const n = l.filter((r) => r.tp === 'lanche').length; return { t: l.length, r: l.length - n, l: n }; };
+  const porData = (l) => { const m = new Map(); l.forEach((r) => { if (!m.has(r.dt)) m.set(r.dt, []); m.get(r.dt).push(r); }); return m; };
+  const mediaDias = (datas, mapa) => { const n = datas.length || 1, c = datas.map((d) => conta(mapa.get(d) || [])); return { t: c.reduce((s, x) => s + x.t, 0) / n, r: c.reduce((s, x) => s + x.r, 0) / n, l: c.reduce((s, x) => s + x.l, 0) / n }; };
+  const dec1 = (v) => (Math.round(v * 10) / 10).toLocaleString('pt-BR');
+  const rotDia = (d) => `${DIAS_CURTO[diaSemanaNum(d)]} ${fmtDataCurta(d)}`;
+  const minutos = (h) => { const [a, b] = h.split(':').map(Number); return a * 60 + b; };
+  /** Variação com seta em relação a uma base: "▲ 12 (+8%)". Sem base, devolve ''. */
+  function delta(atual, base, decimal = false) {
+    if (base == null || !Number.isFinite(base)) return '';
+    const d = atual - base; if (Math.abs(d) < (decimal ? 0.05 : 0.5)) return '= igual';
+    const p = base ? ` (${d > 0 ? '+' : '−'}${Math.abs(Math.round((100 * d) / base))}%)` : '';
+    return `${d > 0 ? '▲' : '▼'} ${decimal ? dec1(Math.abs(d)) : fmtNum(Math.abs(Math.round(d)))}${p}`;
+  }
+  const kpi = (rot, val, sub, cls = '') => `<div class="kpi ${cls}"><span>${rot}</span><b>${val}</b><small>${sub}</small></div>`;
+  const cartao = (titulo, corpo, leg = '', estilo = '') => `<div class="cartao" style="${estilo}"><h2>${titulo}</h2>${corpo}${leg}</div>`;
+  function cursosComparecimento() {
+    const m = new Map();
+    alunosFiltrados().forEach((a) => { if (!a.ativo) return; const k = a.curso || '(sem curso)'; if (!m.has(k)) m.set(k, { curso: k, ativos: 0, at: new Set() }); m.get(k).ativos++; });
+    R.forEach((r) => { const a = A.get(r.a), c = a && a.ativo && m.get(a.curso || '(sem curso)'); if (c) c.at.add(r.a); });
+    return [...m.values()].map((c) => ({ curso: c.curso, ativos: c.ativos, n: c.at.size, p: pct(c.at.size, c.ativos) })).sort((a, b) => b.p - a.p || b.ativos - a.ativos);
+  }
+  const grafCursos = (cs) => barrasH(cs.slice(0, 14).map((c) => ({ r: c.curso, v: c.p, txt: `${String(c.p).replace('.', ',')}% · ${c.n} de ${c.ativos}`, cor: c.p < 30 ? AMBAR : VERDE })), { max: 100, titulo: 'Comparecimento por curso' });
+  /** Movimento por faixa de 15 min. divisor > 1 transforma em média por dia; linhaRef = média dos dias de referência. */
+  function grafHorario(divisor, datasRef, refMapa, largura) {
+    const t = tabelaHorario(), ref = datasRef.length ? datasRef.flatMap((d) => refMapa.get(d) || []).map((r) => minutos(r.h)) : null;
+    const cats = t.map((x) => ({ r: x.inicio, dica: x.faixa, v: [x.total / divisor], cor: x.fora ? AMBAR : x.soLanche ? AZUL : VERDE }));
+    const linhas = ref ? [{ nome: `média dos ${datasRef.length} dias anteriores`, cor: CINZA, tracejada: true, v: t.map((x) => { const m = minutos(x.inicio); return ref.filter((y) => y >= m && y < m + 15).length / datasRef.length; }) }] : [];
+    return colunas(cats, [{ nome: divisor > 1 ? 'média por dia' : 'registros', cor: VERDE }], { linhas, rotulos: false, altura: 220, largura, titulo: 'Movimento por horário' }) +
+      legenda([[VERDE, 'almoço no horário'], [AMBAR, 'almoço fora do horário'], [AZUL, 'só lanche'], ...(ref ? [[CINZA, 'média dos dias anteriores', 1]] : [])]);
+  }
+  function pico() { const t = tabelaHorario().filter((x) => x.total); return t.length ? t.reduce((a, b) => (b.total > a.total ? b : a)) : null; }
+
   function resumo() {
-    const dias = diasFuncionamento(), ativosN = alunosFiltrados().filter((a) => a.ativo).length;
-    const atendidos = new Set(R.map((r) => r.a)).size, fora = R.filter((r) => !r.dh).length, sf = R.filter((r) => r.fs === 'sem_foto').length;
-    const fac = R.filter((r) => r.m === 'facial').length, man = R.filter((r) => r.m === 'manual').length;
-    const porSemana = [1, 2, 3, 4, 5, 6, 7].map((w) => { const ds = dias.filter((d) => diaSemanaNum(d) === w).length; const n = R.filter((r) => diaSemanaNum(r.dt) === w).length;
-      return { r: DIAS_CURTO[w], v: ds ? Math.round(n / ds) : 0, dica: `${DIAS_SEMANA[w]}: média de ${ds ? (n / ds).toFixed(1) : 0} por dia (${ds} dia(s))` }; }).filter((x, i) => i < 5 || x.v);
-    const pd = tabelaDia();
-    return `<div class="kpis">
-      <div class="kpi"><span>Registros</span><b>${fmtNum(R.length)}</b><small>${R.filter((r) => r.tp !== 'lanche').length} almoço · ${R.filter((r) => r.tp === 'lanche').length} lanche · ${dias.length} dia(s)</small></div>
-      <div class="kpi"><span>Média por dia</span><b>${dias.length ? (R.length / dias.length).toFixed(1).replace('.', ',') : 0}</b><small>nos dias com atendimento</small></div>
-      <div class="kpi"><span>Alunos atendidos</span><b>${atendidos}</b><small>${fmtPct(atendidos, ativosN)} dos ${ativosN} ativos</small></div>
-      <div class="kpi ${fora ? 'kpi-aviso' : ''}"><span>Almoço fora do horário</span><b>${fora}</b><small>${fmtPct(fora, R.length)} · janela ${esc(cfg.horario_inicio)}–${esc(cfg.horario_fim)}</small></div>
-      <div class="kpi ${sf ? 'kpi-alerta' : ''}"><span>Sem foto</span><b>${sf}</b><small>${fmtPct(sf, R.length)} dos registros</small></div>
-      <div class="kpi"><span>Reconhecimento facial</span><b>${fmtPct(fac, R.length)}</b><small>${fac} facial · ${R.length - fac - man} CPF · ${man} manual</small></div>
-    </div>
-    <div class="duas-col">
-      <div class="cartao"><h2>Atendimentos por dia</h2>${barras(pd.map((x) => ({ r: fmtDataCurta(x.data), v: x.total, dica: `${DIAS_CURTO[diaSemanaNum(x.data)]} ${fmtData(x.data)}: ${x.total}` })), { titulo: 'Atendimentos por dia' })}</div>
-      <div class="cartao"><h2>Média por dia da semana</h2>${barras(porSemana, { titulo: 'Média por dia da semana' })}</div>
-    </div>
-    <div class="cartao"><h2>Distribuição por horário</h2>${barras(tabelaHorario().map((x) => ({ r: x.inicio, v: x.total, classe: x.fora ? 'fora' : x.soLanche ? 'lanche' : '', dica: `${x.faixa}: ${x.total}${x.lanche ? ` (${x.lanche} lanche)` : ''}` })), { titulo: 'Por horário', altura: 180 })}
-      <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário</span><span><i style="background:#e0a33a"></i>almoço fora do horário</span><span><i style="background:#3b7dd8"></i>lanche</span></div></div>`;
+    if (!R.length) return '<div class="vazio">Sem registros neste período e com estes filtros.</div>';
+    const hoje = hojeISO(), agora = horaDe(), nDias = diasEntre(periodo.ini, periodo.fim) + 1;
+    const modo = nDias === 1 ? 'dia' : nDias <= 10 ? 'curto' : nDias <= 62 ? 'medio' : 'longo';
+    const dias = diasFuncionamento(), T = conta(R), PD = porData(R), ativosL = alunosFiltrados().filter((a) => a.ativo), ativosN = ativosL.length;
+    const vistos = new Set(R.map((r) => r.a)), atendidos = vistos.size, faltaram = ativosL.filter((a) => !vistos.has(a.id)).length;
+    const fora = R.filter((r) => !r.dh).length, sf = R.filter((r) => r.fs === 'sem_foto').length, fac = R.filter((r) => r.m === 'facial').length, man = R.filter((r) => r.m === 'manual').length;
+    const parcial = periodo.fim >= hoje && PD.has(hoje); // o dia de hoje ainda está em andamento
+    const refPD = porData(REF), refDias = [...refPD.keys()].sort(), ult = refDias.slice(-10), mediaRef = ult.length ? mediaDias(ult, refPD) : null;
+    const cursos = cursosComparecimento(), pk = pico(), L = []; // L = frases da "Leitura rápida"
+    const cursosOk = cursos.filter((c) => c.ativos >= 5);
+    const kFixos = kpi('Almoço fora do horário', fora, `${fmtPct(fora, R.length)} · janela ${esc(cfg.horario_inicio)}–${esc(cfg.horario_fim)}`, fora ? 'kpi-aviso' : '') +
+      kpi('Sem foto', sf, `${fmtPct(sf, R.length)} dos registros`, sf ? 'kpi-alerta' : '') +
+      kpi('Reconhecimento facial', fmtPct(fac, R.length), `${fac} facial · ${R.length - fac - man} CPF · ${man} manual`);
+    let kpis = '', graficos = '';
+
+    if (modo === 'dia') {
+      // ---- um único dia: compara com o dia anterior de atendimento, com a média recente e com o mesmo dia da semana
+      const dAnt = refDias[refDias.length - 1], ant = dAnt ? refPD.get(dAnt) : [], A0 = conta(ant);
+      const antAteAgora = conta(ant.filter((r) => r.h.slice(0, 5) <= agora)), base = parcial ? antAteAgora : A0;
+      const w = diaSemanaNum(periodo.ini), mesmos = refDias.filter((d) => diaSemanaNum(d) === w), mediaDS = mesmos.length ? mediaDias(mesmos, refPD) : null;
+      const varMedia = mediaRef && mediaRef.t ? Math.round((100 * (T.t - mediaRef.t)) / mediaRef.t) : null;
+      kpis = kpi('Registros', fmtNum(T.t), `${T.r} almoço · ${T.l} lanche${dAnt ? `<br>${delta(T.t, base.t)} em relação a ${rotDia(dAnt)}${parcial ? ` até ${agora}` : ''}` : ''}`) +
+        (parcial && dAnt && base.t
+          // dia em andamento: comparar com um dia completo distorce; compara o ritmo até o mesmo horário
+          ? kpi(`Ritmo até ${agora}`, `${T.t >= base.t ? '+' : '−'}${Math.abs(Math.round((100 * (T.t - base.t)) / base.t))}%`, `em relação ao mesmo horário de ${rotDia(dAnt)}${mediaRef ? ` · um dia completo tem tido ${dec1(mediaRef.t)} em média` : ''}`)
+          : kpi('Em relação à média', varMedia == null ? 'sem histórico' : `${varMedia > 0 ? '+' : varMedia < 0 ? '−' : ''}${Math.abs(varMedia)}%`, mediaRef ? `média de ${dec1(mediaRef.t)} nos últimos ${ult.length} dia(s) de atendimento` : 'ainda não há dias anteriores para comparar')) +
+        kpi('Alunos atendidos', atendidos, `${fmtPct(atendidos, ativosN)} dos ${ativosN} ativos`) + kFixos;
+      const cats = [{ r: parcial ? `Hoje até ${agora}` : rotDia(periodo.ini), v: [T.r, T.l] },
+        ...(dAnt && parcial ? [{ r: `${rotDia(dAnt)} até ${agora}`, v: [antAteAgora.r, antAteAgora.l] }] : []),
+        ...(dAnt ? [{ r: `${rotDia(dAnt)}${parcial ? ' (dia todo)' : ''}`, v: [A0.r, A0.l] }] : []),
+        ...(mediaRef && ult.length > 1 ? [{ r: `Média de ${ult.length} dias`, v: [mediaRef.r, mediaRef.l] }] : []),
+        ...(mediaDS ? [{ r: `Média de ${DIAS_CURTO[w]} (${mesmos.length})`, v: [mediaDS.r, mediaDS.l] }] : [])];
+      graficos = `<div class="duas-col">${cartao(parcial ? 'Hoje comparado' : 'Este dia comparado', cats.length > 1 ? colunas(cats, SERIES, { titulo: 'Comparativo do dia' }) + legenda([[VERDE, 'almoço'], [AZUL, 'lanche']]) : '<div class="vazio">Ainda não há dias anteriores para comparar.</div>')}
+        ${cartao('Comparecimento por curso (alunos ativos atendidos)', grafCursos(cursos))}</div>
+        ${cartao('Movimento por horário (faixas de 15 minutos)', grafHorario(1, ult, refPD, 1200))}`;
+      if (dAnt) L.push(parcial ? `Até ${agora} foram <b>${T.t}</b> registros; no mesmo horário de ${rotDia(dAnt)} eram <b>${antAteAgora.t}</b> (${delta(T.t, antAteAgora.t)}). Aquele dia fechou com ${A0.t}.` : `<b>${T.t}</b> registros, ${delta(T.t, A0.t)} em relação a ${rotDia(dAnt)} (${A0.t}).`);
+      if (mediaRef && !parcial) L.push(`A média dos últimos ${ult.length} dia(s) de atendimento é ${dec1(mediaRef.t)}: almoço ${delta(T.r, mediaRef.r, true)}, lanche ${delta(T.l, mediaRef.l, true)}.`);
+      if (mediaRef && parcial) L.push(`O dia ainda está em andamento; um dia completo tem tido em média ${dec1(mediaRef.r)} almoços e ${dec1(mediaRef.l)} lanches.`);
+    } else {
+      // ---- vários dias: compara com o período anterior de mesmo tamanho (semana com semana, mês com mês)
+      const fechados = dias.filter((d) => d < hoje), base = fechados.length ? fechados : dias, M = mediaDias(base, PD);
+      const shift = nDias <= 7 ? 7 : nDias, antIni = addDias(periodo.ini, -shift), antFim = addDias(periodo.fim, -shift);
+      const ant = antIni >= refIni ? REF.filter((r) => r.dt >= antIni && r.dt <= antFim) : [], antPD = porData(ant), antDias = [...antPD.keys()], MA = antDias.length ? mediaDias(antDias, antPD) : null;
+      const rotAnt = `${fmtDataCurta(antIni)} a ${fmtDataCurta(antFim)}`;
+      kpis = kpi('Registros', fmtNum(T.t), `${T.r} almoço · ${T.l} lanche · ${dias.length} dia(s)${MA && !parcial ? `<br>${delta(T.t, ant.length)} em relação a ${rotAnt}` : ''}`) +
+        kpi('Média por dia', dec1(M.t), `${dec1(M.r)} almoço · ${dec1(M.l)} lanche${parcial && fechados.length ? ' · sem contar hoje' : ''}${MA ? `<br>${delta(M.t, MA.t, true)} em relação a ${rotAnt}` : ''}`) +
+        kpi('Alunos atendidos', atendidos, `${fmtPct(atendidos, ativosN)} dos ${ativosN} ativos · ${faltaram} não compareceram`) + kFixos;
+
+      // por dia (períodos curtos e médios) ou por semana e por mês (períodos longos)
+      const td = tabelaDia(); while (td.length && !td[0].total) td.shift(); // sem os dias vazios antes do primeiro atendimento
+      let blocoTempo = '';
+      if (modo === 'curto') {
+        const linhas = MA ? [{ nome: `mesmo dia em ${rotAnt}`, cor: CINZA, tracejada: true, v: td.map((x) => { const l = antPD.get(addDias(x.data, -shift)); return l ? l.length : null; }) }] : [];
+        blocoTempo = cartao('Atendimentos por dia', colunas(td.map((x) => ({ r: rotDia(x.data), dica: `${DIAS_SEMANA[diaSemanaNum(x.data)]} ${fmtData(x.data)}${x.data === hoje ? ' (em andamento)' : ''}`, v: [x.refeicao, x.lanche] })), SERIES, { empilhar: true, linhas, titulo: 'Atendimentos por dia' }) +
+          legenda([[VERDE, 'almoço'], [AZUL, 'lanche'], ...(MA ? [[CINZA, 'total do mesmo dia no período anterior', 1]] : [])]));
+      } else if (modo === 'medio') {
+        const comReg = td.filter((x) => x.total && x.data < hoje), mm = td.map((x) => { if (!x.total || x.data >= hoje) return null; /* hoje, parcial, fica fora da média */ const i = comReg.indexOf(x), j = comReg.slice(Math.max(0, i - 4), i + 1); return j.reduce((s, y) => s + y.total, 0) / j.length; });
+        blocoTempo = cartao('Atendimentos por dia', colunas(td.map((x) => ({ r: fmtDataCurta(x.data), dica: `${DIAS_SEMANA[diaSemanaNum(x.data)]} ${fmtData(x.data)}`, v: [x.refeicao, x.lanche] })), SERIES, { empilhar: true, rotulos: td.length <= 23, linhas: [{ nome: 'média móvel de 5 dias', cor: AMBAR, v: mm }], largura: 1200, titulo: 'Atendimentos por dia' }) +
+          legenda([[VERDE, 'almoço'], [AZUL, 'lanche'], [AMBAR, 'média móvel dos últimos 5 dias de atendimento', 1]]));
+      } else {
+        const grupo = (chave) => { const g = new Map(); dias.forEach((d) => { const k = chave(d); if (!g.has(k)) g.set(k, []); g.get(k).push(d); }); return [...g.entries()].sort((a, b) => a[0].localeCompare(b[0])); };
+        const sem = grupo(inicioSemana).map(([k, ds]) => { const m = mediaDias(ds, PD); return { r: fmtDataCurta(k), dica: `semana de ${fmtData(k)} (${ds.length} dia(s))`, v: [m.r, m.l] }; });
+        const mes = grupo((d) => d.slice(0, 7)).map(([k, ds]) => { const c = conta(ds.flatMap((d) => PD.get(d))); return { r: `${MESES[+k.slice(5) - 1].slice(0, 3)}/${k.slice(2, 4)}`, dica: `${MESES[+k.slice(5) - 1]} de ${k.slice(0, 4)} (${ds.length} dia(s))`, v: [c.r, c.l] }; });
+        blocoTempo = cartao('Média diária em cada semana', colunas(sem, SERIES, { empilhar: true, rotulos: sem.length <= 26, largura: 1200, titulo: 'Média diária por semana' }) + legenda([[VERDE, 'almoço'], [AZUL, 'lanche']])) +
+          `<div style="height:16px"></div>` + cartao('Total por mês', colunas(mes, SERIES, { titulo: 'Total por mês' }) + legenda([[VERDE, 'almoço'], [AZUL, 'lanche']]));
+      }
+      // dia da semana (só faz sentido quando o período repete dias da semana)
+      const ds = [1, 2, 3, 4, 5, 6, 7].map((k) => { const l = base.filter((d) => diaSemanaNum(d) === k); return { k, n: l.length, m: l.length ? mediaDias(l, PD) : null }; }).filter((x) => x.m);
+      const blocoDS = modo !== 'curto' && ds.some((x) => x.n > 1) ? cartao('Média por dia da semana', colunas(ds.map((x) => ({ r: DIAS_CURTO[x.k], dica: `${DIAS_SEMANA[x.k]} (${x.n} dia(s))`, v: [x.m.r, x.m.l] })), SERIES, { titulo: 'Média por dia da semana' }) + legenda([[VERDE, 'almoço'], [AZUL, 'lanche']])) : '';
+      // assiduidade: em quantos dias do período cada aluno ativo veio
+      const vezes = new Map(); R.forEach((r) => vezes.set(r.a, (vezes.get(r.a) || 0) + 1));
+      const fx = [['não vieram', 0, 0], ['até 25%', 0.0001, 25], ['26 a 50%', 25.0001, 50], ['51 a 75%', 50.0001, 75], ['76 a 100%', 75.0001, 1e9]].map(([r, a, b]) => ({ r, n: ativosL.filter((al) => { const p = Math.min(100, (100 * (vezes.get(al.id) || 0)) / dias.length); return p >= a && p <= b; }).length }));
+      const assiduos = fx[4].n;
+      const blocoAss = dias.length >= 3 ? cartao(`Assiduidade dos ${ativosN} alunos ativos (dias em que vieram ÷ ${dias.length} dias de atendimento)`, colunas(fx.map((x, i) => ({ r: x.r, v: [x.n], cor: i === 0 ? AMBAR : VERDE })), [{ nome: 'alunos', cor: VERDE }], { titulo: 'Assiduidade' })) : '';
+      const blocoCur = cartao('Comparecimento por curso (alunos ativos que vieram ao menos uma vez)', grafCursos(cursos));
+      const blocoHor = cartao('Movimento por horário, média por dia (faixas de 15 minutos)', grafHorario(dias.length, [], refPD, 1200));
+      const pares = [blocoDS, blocoAss, blocoCur].filter(Boolean);
+      graficos = (modo === 'curto' ? `<div class="duas-col">${blocoTempo}${pares.shift()}</div>` : blocoTempo + '<div style="height:16px"></div>') +
+        (pares.length ? `<div class="duas-col">${pares.join('')}</div>` : '') + blocoHor;
+
+      if (MA) L.push(`Média de <b>${dec1(M.t)}</b> atendimentos por dia, ${delta(M.t, MA.t, true)} em relação ao período anterior (${rotAnt}): almoço ${delta(M.r, MA.r, true)}, lanche ${delta(M.l, MA.l, true)}.`);
+      if (base.length >= 2) { const o = base.map((d) => [d, PD.get(d).length]).sort((a, b) => b[1] - a[1]); L.push(`Dia mais cheio: <b>${rotDia(o[0][0])}</b> (${o[0][1]}). Dia mais vazio: <b>${rotDia(o[o.length - 1][0])}</b> (${o[o.length - 1][1]}).`); }
+      if (blocoDS) { const o = ds.filter((x) => x.k <= 5).sort((a, b) => b.m.t - a.m.t); if (o.length >= 2) L.push(`${DIAS_SEMANA[o[0].k][0].toUpperCase() + DIAS_SEMANA[o[0].k].slice(1)} é o dia da semana mais movimentado (média de ${dec1(o[0].m.t)}) e ${DIAS_SEMANA[o[o.length - 1].k]} o mais fraco (${dec1(o[o.length - 1].m.t)}).`); }
+      if (modo !== 'curto' && base.length >= 6) { const h = Math.floor(base.length / 2), a = mediaDias(base.slice(0, h), PD).t, b = mediaDias(base.slice(-h), PD).t; if (Math.abs(b - a) / (a || 1) >= 0.05) L.push(`Tendência de ${b > a ? 'alta' : 'queda'}: a média diária foi de ${dec1(a)} na primeira metade do período para ${dec1(b)} na segunda.`); }
+      if (ativosN) L.push(`<b>${faltaram}</b> aluno(s) ativo(s) (${fmtPct(faltaram, ativosN)}) não compareceram nenhuma vez${blocoAss ? `; <b>${assiduos}</b> vieram em mais de 75% dos dias` : ''}. A lista está na aba "Por aluno", filtro "Só quem NÃO compareceu".`);
+    }
+    if (pk) L.push(`Pico de movimento entre <b>${pk.faixa}</b>, com ${modo === 'dia' ? `${pk.total} registros` : `${dec1(pk.total / dias.length)} registros por dia em média`}.`);
+    if (cursosOk.length >= 2) L.push(`Maior comparecimento: <b>${esc(cursosOk[0].curso)}</b> (${String(cursosOk[0].p).replace('.', ',')}%). Menor: <b>${esc(cursosOk[cursosOk.length - 1].curso)}</b> (${String(cursosOk[cursosOk.length - 1].p).replace('.', ',')}%), entre os cursos com 5 ou mais alunos ativos.`);
+    if (fora || sf) L.push(`Atenção: ${[fora && `${fora} almoço(s) fora do horário`, sf && `${sf} registro(s) sem foto`].filter(Boolean).join(' e ')}. Detalhes na aba "Ocorrências".`);
+
+    return `<div class="kpis">${kpis}</div>
+      ${L.length ? `<div class="cartao" style="margin-bottom:16px"><h2>Leitura rápida</h2><ul style="margin:8px 0 0;padding-left:20px;line-height:1.7">${L.map((x) => `<li>${x}</li>`).join('')}</ul></div>` : ''}
+      ${graficos}`;
   }
 
   function desenharAlunos() {
