@@ -278,7 +278,9 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     const lim = Number(S.config.reconhecimento.limiar ?? 0.5);
     const m = S.rec.melhor(desc);
     const margem = m ? m.segundo - m.distancia : 0;
-    const bateu = m && S.alunos.has(m.aluno) && m.distancia <= lim && margem >= 0.06;
+    // casamento apertado (ate 0,36) aceita folga normal; casamento folgado so vale com folga grande para o segundo
+      // colocado. Isso evita registrar um aluno no nome de outro parecido (caso real: dist. 0,39 com folga de 0,07).
+      const bateu = m && S.alunos.has(m.aluno) && m.distancia <= lim && margem >= (m.distancia <= 0.36 ? 0.06 : 0.12);
     if (bateu) {
       c.seq = c.cand === m.aluno ? c.seq + 1 : 1; c.cand = m.aluno;
       mostrarRosto(rosto, '#35d05a');
@@ -547,7 +549,9 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     }
     S.descFacial = null;
     const duvida = !!S.duvidaFace; S.duvidaFace = false; // rosto parecido com o de outro aluno: a foto fica pendente em "Validar rostos"
-    const confirmada = !!descritor && !duvida;   // identidade confirmada com ENTER: a referência já nasce válida
+    // reconhecimento folgado nao vira "ultimo registro": se a pessoa for outra, a referencia errada se reforcaria sozinha
+    const fraco = metodo === 'facial' && !(distancia <= 0.36);
+    const confirmada = !!descritor && !duvida && !fraco;   // identidade confirmada com ENTER: a referência já nasce válida
 
     const agora = relogio.agora();
     const it = {
