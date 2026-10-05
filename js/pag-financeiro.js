@@ -94,6 +94,8 @@ export async function render(el, { cabecalho, perfil }) {
   E.rel = { ini: E.cfg.inicio, fim: E.hoje };
   iniciarSim();
   desenhar();
+  parar(); relogioFin = setInterval(atualizar, 30000);
+  return parar; // o roteador chama ao sair da página
 }
 
 // ---------------------------------------------------------------- cálculo
@@ -214,6 +216,8 @@ function eixoY(max, min, fmt, ml, mr, mt, ph) {
   return s;
 }
 function marcasMes(L, X, mt, ph) {
+  // período curto: um rótulo por dia; período longo: um por mês
+  if (L.length <= 11) return L.map((p, i) => `<text x="${X(i)}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === L.length - 1 ? 'end' : 'middle'}">${DIAS_CURTO[diaSemanaNum(p.d)]} ${fmtDataCurta(p.d)}</text>`).join('');
   let s = '', ant = '';
   L.forEach((p, i) => {
     const m = mesDe(p.d); if (m === ant) return; ant = m;
@@ -234,7 +238,7 @@ function grafSaldo(base, S) {
   const linha = (s, f) => s.map((p, i) => (f(p, i) ? `${X(i).toFixed(1)},${Y(p.saldo).toFixed(1)}` : null)).filter(Boolean).join(' ');
   const iProj = B.findIndex((x) => x.proj), corte = iProj < 0 ? n - 1 : Math.max(0, iProj - 1);
   let s = abre('Saldo ao longo do período') + eixoY(max, min, brlCurto, ml, mr, mt, ph);
-  if (min < 0) s += `<line x1="${ml}" x2="${W - mr}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--vermelho)" stroke-width="1.5"/>`;
+  if (min < 0) s += `<line x1="${ml}" x2="${W - mr}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--vermelho)" stroke-width="1.2" stroke-dasharray="6 4"/><text x="${W - mr - 2}" y="${Y(0) - 5}" text-anchor="end" style="fill:var(--vermelho)">saldo zero (abaixo desta linha o saldo é negativo)</text>`;
   s += marcasMes(B, X, mt, ph);
   s += `<polyline fill="none" stroke="${VERDE}" stroke-width="2.5" points="${linha(B, (p, i) => i <= corte)}"/>`;
   if (iProj > 0) s += `<polyline fill="none" stroke="${CINZA}" stroke-width="2" stroke-dasharray="5 4" points="${linha(B, (p, i) => i >= corte)}"/>`;
@@ -351,7 +355,7 @@ function carrossel() {
   const lp = (l) => (sim ? l : []); // itens de legenda que só existem quando há projeção
   const G = agrupar(usa.linhas, E.gran, sim ? null : E.rel.ini, sim ? null : E.rel.fim);
   const T = {
-    saldo: [sim ? 'Saldo ao longo do período' : 'Saldo até hoje', () => grafSaldo(sim ? base : real, usa), [[VERDE, 'realizado'], ...lp([[CINZA, 'projeção no ritmo atual', 1]]), ...(sim && E.simAlt ? [[AZUL, 'simulação', 1]] : [])]],
+    saldo: [sim ? 'Saldo ao longo do período' : 'Saldo até hoje', () => grafSaldo(sim ? base : real, usa), [[VERDE, 'realizado'], ...lp([[CINZA, 'projeção no ritmo atual', 1]]), ...(sim && E.simAlt ? [[AZUL, 'simulação', 1]] : []), ...(usa.linhas.some((x) => x.saldo < 0) ? [['var(--vermelho)', 'saldo zero', 1]] : [])]],
     gasto: [`Gasto por ${GRAN[E.gran]}`, () => grafGasto(G, E.gran), [[VERDE, 'almoço'], [AZUL, 'lanche'], [AMBAR, 'outras despesas'], ...lp([['#b9d9c3', 'mais claro = projeção']])]],
     acum: ['Gasto acumulado e recurso disponível', () => grafAcum(usa), [[VERDE, 'gasto acumulado'], ...lp([[E.simAlt ? AZUL : CINZA, E.simAlt ? 'simulação' : 'projeção', 1]]), [AMBAR, 'recurso creditado']]],
     qtd: [`Almoços e lanches por ${GRAN[E.gran]}`, () => grafQtd(G, E.gran), [[VERDE, 'almoços'], [AZUL, 'lanches'], ...lp([['#b9d9c3', 'mais claro = projeção']])]],
@@ -369,22 +373,49 @@ ${T[1]()}${legenda(T[2])}
 function desenharGraf() { const b = $('#fin-graf', E.el); if (b) b.innerHTML = carrossel(); }
 
 // ---------------------------------------------------------------- tela
-function desenhar() {
-  const { el, cfg } = E, { base } = recalc();
+/** Cartões do topo: só dados reais. As médias usam apenas dias encerrados; o dia de hoje aparece à parte, como parcial. */
+function kpisTopo() {
+  const { cfg } = E, { base } = E.calc, semCredito = !cfg.creditos.length;
   const orc = soma(cfg.creditos, (x) => num(x.valor)), outras = soma(cfg.despesas.filter((x) => x.data <= E.hoje), (x) => num(x.valor));
-  const feitas = base.linhas.filter((x) => !x.proj), qr = soma(feitas, (x) => x.r), ql = soma(feitas, (x) => x.l), consumo = soma(feitas, (x) => x.cr + x.cl), nd = feitas.filter((x) => x.at).length;
+  const feitas = base.linhas.filter((x) => !x.proj), qr = soma(feitas, (x) => x.r), ql = soma(feitas, (x) => x.l), consumo = soma(feitas, (x) => x.cr + x.cl);
+  const fech = feitas.filter((x) => x.at && x.d < E.hoje), nd = fech.length, hj = feitas.find((x) => x.d === E.hoje && x.at);
+  const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `<div class="kpis">
+<div class="kpi"><span>Recurso destinado</span><b>${semCredito ? 'A lançar' : brl(orc)}</b><small>${esc(cfg.fonte || '')}${cfg.creditos.length > 1 ? ` · ${cfg.creditos.length} lançamentos` : ''}</small></div>
+<div class="kpi"><span>Consumido até hoje</span><b>${brl(consumo)}</b><small>${fmtNum(qr)} almoços · ${fmtNum(ql)} lanches${outras ? ` · + ${brl(outras)} em outras despesas` : ''}</small></div>
+<div class="kpi ${base.saldoHoje < 0 ? 'kpi-alerta' : ''}"><span>Saldo hoje</span><b>${brl(base.saldoHoje)}</b><small>${orc ? `${Math.max(0, Math.round((100 * base.saldoHoje) / orc))}% do recurso` : ''}</small></div>
+<div class="kpi"><span>Custo parcial de hoje</span><b>${brl(hj ? hj.cr + hj.cl : 0)}</b><small>${hj ? `${fmtNum(hj.r)} almoços · ${fmtNum(hj.l)} lanches` : 'sem registros hoje'} · atualizado às ${hora}</small></div>
+<div class="kpi"><span>Dias de atendimento encerrados</span><b>${nd}</b><small>${nd ? `média de ${fmtNum(Math.round(soma(fech, (x) => x.r) / nd))} almoços e ${fmtNum(Math.round(soma(fech, (x) => x.l) / nd))} lanches por dia` : 'nenhum dia encerrado'} · sem contar hoje</small></div>
+<div class="kpi"><span>Custo médio por dia</span><b>${brl(nd ? soma(fech, (x) => x.cr + x.cl) / nd : 0)}</b><small>dias encerrados, sem contar hoje</small></div>
+</div>`;
+}
+/** Tempo real: busca os registros de novo a cada 30 s e atualiza os números sem mexer no que está sendo digitado. */
+async function atualizar() {
+  if (!E || !E.el.isConnected) return parar();
+  if (document.hidden) return;
+  let d; try { d = await api('financeiro_obter'); } catch { return; }
+  if (!E || !E.el.isConnected) return parar();
+  const antes = JSON.stringify([E.hoje, E.dias, E.ativos]);
+  E.hoje = d.hoje; E.dias = d.dias || []; E.ativos = d.ativos || E.ativos;
+  const mudou = antes !== JSON.stringify([E.hoje, E.dias, E.ativos]), digitando = E.el.contains(document.activeElement) && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
+  recalc();
+  $('#fin-kpis', E.el).innerHTML = kpisTopo();
+  if (!mudou || digitando) return;
+  if (E.aba === 'relatorio') desenhar();
+  else if (E.aba === 'simulador') { resultadoSim(); desenharGraf(); }
+}
+let relogioFin = null;
+function parar() { clearInterval(relogioFin); relogioFin = null; }
+
+function desenhar() {
+  const { el, cfg } = E;
+  recalc();
   const semPrecos = !cfg.precos.length, semCredito = !cfg.creditos.length;
   el.innerHTML = `
 <div class="so-impressao"><h2>PASES · Financeiro · ${ABAS.find(([k]) => k === E.aba)[1]} · emitido em ${fmtData(E.hoje)}</h2></div>
 ${semPrecos ? '<div class="caixa aviso-caixa" style="margin-bottom:12px">Informe na aba <b>Recurso e valores</b> o valor do almoço e do lanche para o sistema calcular o consumo. O recurso pode ser lançado depois.</div>'
     : semCredito ? '<div class="caixa aviso-caixa" style="margin-bottom:12px"><b>Recurso ainda não lançado.</b> O consumo já é calculado e o saldo fica negativo até o crédito ser lançado na aba <b>Recurso e valores</b>, o que pode ser feito com data retroativa.</div>' : ''}
-<div class="kpis">
-<div class="kpi"><span>Recurso destinado</span><b>${semCredito ? 'A lançar' : brl(orc)}</b><small>${esc(cfg.fonte || '')}${cfg.creditos.length > 1 ? ` · ${cfg.creditos.length} lançamentos` : ''}</small></div>
-<div class="kpi"><span>Consumido até hoje</span><b>${brl(consumo)}</b><small>${fmtNum(qr)} almoços · ${fmtNum(ql)} lanches${outras ? ` · + ${brl(outras)} em outras despesas` : ''}</small></div>
-<div class="kpi ${base.saldoHoje < 0 ? 'kpi-alerta' : ''}"><span>Saldo hoje</span><b>${brl(base.saldoHoje)}</b><small>${orc ? `${Math.max(0, Math.round((100 * base.saldoHoje) / orc))}% do recurso` : ''}</small></div>
-<div class="kpi"><span>Dias de atendimento realizados</span><b>${nd}</b><small>${nd ? `média de ${fmtNum(Math.round(qr / nd))} almoços e ${fmtNum(Math.round(ql / nd))} lanches por dia` : 'sem registros no período'}</small></div>
-<div class="kpi"><span>Custo médio por dia</span><b>${brl(nd ? consumo / nd : 0)}</b><small>consumo realizado ÷ dias de atendimento</small></div>
-</div>
+<div id="fin-kpis">${kpisTopo()}</div>
 <div class="abas" id="fin-abas">${ABAS.map(([k, t]) => `<button data-aba="${k}" class="${k === E.aba ? 'ativo' : ''}">${t}</button>`).join('')}</div>
 <div id="fin-corpo">${E.aba === 'relatorio' ? telaRelatorio() : E.aba === 'simulador' ? telaSimulador() : telaRecurso()}</div>`;
 
