@@ -451,12 +451,12 @@ function aoClicar(e) {
 // ---------------------------------------------------------------- aba Relatório
 function linhasRel() { return agrupar(E.calc.real.linhas, E.gran, E.rel.ini, E.rel.fim); }
 function telaRelatorio() {
-  const G = linhasRel(), t = { d: 0, r: 0, l: 0, cr: 0, cl: 0, o: 0, c: 0 };
+  const G = linhasRel(), t = { d: 0, r: 0, l: 0, cr: 0, cl: 0, o: 0, c: 0 }, porDia = E.gran === 'dia'; // por dia, a coluna "dias de atendimento" seria sempre 1
   const linhas = G.map((m) => {
     const proj = m.dp > 0 && !m.dr, misto = m.dp > 0 && m.dr > 0, cls = proj ? 'num proj' : 'num';
     t.d += m.dr + m.dp; t.r += m.r + m.pr; t.l += m.l + m.pl; t.cr += m.cr + m.pcr; t.cl += m.cl + m.pcl; t.o += m.outras; t.c += m.cred;
     return `<tr><td><b>${rotulo(m, E.gran)}</b>${proj ? ' <span class="selo">projeção</span>' : misto ? ' <span class="selo">parte projetada</span>' : ''}</td>
-<td class="${cls}">${m.dr + m.dp || ''}</td><td class="${cls}">${fmtNum(Math.round(m.r + m.pr))}</td><td class="${cls}">${fmtNum(Math.round(m.l + m.pl))}</td>
+${porDia ? '' : `<td class="${cls}">${m.dr + m.dp || ''}</td>`}<td class="${cls}">${fmtNum(Math.round(m.r + m.pr))}</td><td class="${cls}">${fmtNum(Math.round(m.l + m.pl))}</td>
 <td class="${cls}">${brl(m.cr + m.pcr)}</td><td class="${cls}">${brl(m.cl + m.pcl)}</td><td class="${cls}">${m.outras ? brl(m.outras) : ''}</td>
 <td class="${cls}"><b>${brl(gasto(m))}</b></td><td class="${cls}">${m.cred ? brl(m.cred) : ''}</td>
 <td class="num"><b style="${m.saldo < 0 ? 'color:var(--vermelho)' : ''}">${brl(m.saldo)}</b></td></tr>`;
@@ -470,9 +470,9 @@ function telaRelatorio() {
 </div>
 <div id="fin-graf">${carrossel()}</div>
 <div class="cartao"><h2>Relatório financeiro por ${GRAN[E.gran]} · ${fmtData(E.rel.ini)} a ${fmtData(E.rel.fim)}</h2>
-${G.length ? `<div class="tabela-wrap" style="margin-top:10px"><table class="tabela"><thead><tr><th>${E.gran === 'dia' ? 'Dia' : E.gran === 'semana' ? 'Semana' : 'Mês'}</th><th class="num">Dias de atendimento</th><th class="num">Almoços</th><th class="num">Lanches</th><th class="num">Almoço (R$)</th><th class="num">Lanche (R$)</th><th class="num">Outras despesas</th><th class="num">Total gasto</th><th class="num">Créditos</th><th class="num">Saldo no fim</th></tr></thead>
+${G.length ? `<div class="tabela-wrap" style="margin-top:10px"><table class="tabela"><thead><tr><th>${E.gran === 'dia' ? 'Dia' : E.gran === 'semana' ? 'Semana' : 'Mês'}</th>${porDia ? '' : '<th class="num">Dias de atendimento</th>'}<th class="num">Almoços</th><th class="num">Lanches</th><th class="num">Almoço (R$)</th><th class="num">Lanche (R$)</th><th class="num">Outras despesas</th><th class="num">Total gasto</th><th class="num">Créditos</th><th class="num">Saldo no fim</th></tr></thead>
 <tbody>${linhas}</tbody>
-<tfoot><tr><td>Total</td><td class="num">${t.d}</td><td class="num">${fmtNum(Math.round(t.r))}</td><td class="num">${fmtNum(Math.round(t.l))}</td><td class="num">${brl(t.cr)}</td><td class="num">${brl(t.cl)}</td><td class="num">${t.o ? brl(t.o) : ''}</td><td class="num">${brl(t.cr + t.cl + t.o)}</td><td class="num">${t.c ? brl(t.c) : ''}</td><td class="num" style="${saldoFinal < 0 ? 'color:var(--vermelho)' : ''}">${brl(saldoFinal)}</td></tr></tfoot></table></div>` : vazio('Sem movimento neste intervalo.')}
+<tfoot><tr><td>Total${porDia ? ` (${t.d} dia${t.d === 1 ? '' : 's'})` : ''}</td>${porDia ? '' : `<td class="num">${t.d}</td>`}<td class="num">${fmtNum(Math.round(t.r))}</td><td class="num">${fmtNum(Math.round(t.l))}</td><td class="num">${brl(t.cr)}</td><td class="num">${brl(t.cl)}</td><td class="num">${t.o ? brl(t.o) : ''}</td><td class="num">${brl(t.cr + t.cl + t.o)}</td><td class="num">${t.c ? brl(t.c) : ''}</td><td class="num" style="${saldoFinal < 0 ? 'color:var(--vermelho)' : ''}">${brl(saldoFinal)}</td></tr></tfoot></table></div>` : vazio('Sem movimento neste intervalo.')}
 <p class="pequeno mudo">Somente dados reais: registros realizados e lançamentos até ${fmtData(E.hoje)}. A projeção até o fim do período fica na aba Projeções.${E.gran === 'dia' ? ' Só aparecem os dias com atendimento ou lançamento.' : ''}</p></div>`;
 }
 
