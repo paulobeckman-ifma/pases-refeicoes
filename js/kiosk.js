@@ -314,7 +314,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
   function mensagemConfirmar(a, distancia) {
     const troca = S.tipoSel !== modalidadeDe(a);
     mensagem(`${a.n} · ${a.m || ''} · ${TIPO[S.tipoSel]}${troca ? ` (troca: cadastro é ${TIPO[modalidadeDe(a)]})` : ''}`,
-      `${distancia != null ? `semelhança ${semelhanca(distancia)}% · ` : 'pelo CPF · '}1 almoço · 2 lanche · ENTER confirma · ESC se não for ele(a)`);
+      `${distancia != null ? `semelhança ${semelhanca(distancia)}% · ` : 'pelo CPF · '}1 almoço · 2 lanche · ${distancia === null ? 'ATENDENTE: confira se o aluno está diante da câmera e aperte ENTER no teclado do notebook' : 'ENTER confirma'} · ESC se não for ele(a)`);
   }
   // antes do ENTER o aluno pode trocar: tecla 1 = refeição, 2 = lanche (sem escolha, vale o cadastro)
   function escolherTipo(t) {
@@ -371,7 +371,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
   const modalidadeDe = (aluno) => (aluno.md === 'lanche' ? 'lanche' : 'refeicao');
   function telaEscolha(aluno, foto, distancia = null) {
     return { nome: aluno.n, matricula: aluno.m, curso: aluno.c, foto, semelhanca: distancia != null ? semelhanca(distancia) : null,
-      tipoSel: S.tipoSel, md: modalidadeDe(aluno), confirmar: S.config.reconhecimento.confirmar !== false };
+      tipoSel: S.tipoSel, md: modalidadeDe(aluno), porCpf: S.candidato?.metodo === 'cpf', passo: S.confPasso || 1, confirmar: S.config.reconhecimento.confirmar !== false };
   }
   // vale o que estiver selecionado ao apertar ENTER (cadastro, ou a troca feita com 1/2)
   function confirmarEscolha() {
@@ -401,9 +401,20 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     S.cpf = S.cpf.slice(0, -1); S.ultimoDigitoEm = 0; desenharCpf();
     if (!S.cpf) definirEstado('aguardando');
   }
-  async function enter() {
+  async function enter(quem = 'balcao') {
     if (S.estado === 'resultado') { fecharResultado(); return; }
-    if (S.estado === 'confirmar' && S.candidato) return confirmarEscolha();
+    if (S.estado === 'confirmar' && S.candidato) {
+      // pelo CPF quem confirma e o atendente (ENTER do teclado do notebook ou o OK da tela): ele confere se o aluno
+      // esta diante da camera. O ENTER do tecladinho numerico do aluno so avisa que ele terminou de digitar.
+      if (S.candidato.metodo === 'cpf' && quem === 'aluno') {
+        if (S.confPasso !== 2) {
+          const c = S.candidato; S.confPasso = 2; mensagemConfirmar(c.aluno, c.distancia);
+          tela({ tipo: 'estado', estado: 'confirmar', ...telaEscolha(c.aluno, S.fotoCand, c.distancia) });
+        }
+        return;
+      }
+      return confirmarEscolha();
+    }
     if (S.estado === 'aguardando' || S.estado === 'naoreconhecido') return iniciarCaptura();
     if (S.estado === 'cpf') {
       if (S.cpf.length < 11) { mensagem('CPF incompleto', 'Digite os 11 números do CPF.'); return; }
@@ -434,7 +445,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     if (S.hoje.has(aluno.id)) return resultado('duplicado', { aluno, hora: S.hoje.get(aluno.id), tipo: S.hojeTipo.get(aluno.id) });
     if (!aluno.at) return resultado('inativo', { aluno });
     S.cpf = ''; desenharCpf();
-    S.candidato = { aluno, distancia: null, metodo: 'cpf' };
+    S.candidato = { aluno, distancia: null, metodo: 'cpf' }; S.confPasso = 1;
     S.fotoCand = await fotoRapida(aluno.fb || aluno.fs);
     S.tipoSel = modalidadeDe(aluno);
     enviarQuadro();   // o apoio vê quem está diante da câmera ao confirmar pelo CPF
@@ -448,7 +459,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
   function teclaVirtual(k) {
     if (document.querySelector('.fundo-modal')) return;
     if (/^\d$/.test(k)) return digito(k);
-    if (k === 'Enter') return enter();
+    if (k === 'Enter') return enter('balcao');
     if (k === 'Backspace') return apagar();
     if (k === 'Escape') return cancelar();
   }
@@ -459,7 +470,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     let d = null;
     if (/^\d$/.test(k)) d = k; else if (/^Numpad\d$/.test(cod)) d = cod.slice(-1);
     if (d !== null) { e.preventDefault(); return digito(d); }
-    if (k === 'Enter') { e.preventDefault(); return enter(); }
+    if (k === 'Enter') { e.preventDefault(); return enter(cod === 'NumpadEnter' ? 'aluno' : 'balcao'); }
     if (k === 'Backspace') { e.preventDefault(); return apagar(); }
     if (k === 'Escape' || k === '-' || k === 'Delete' || cod === 'NumpadSubtract' || cod === 'NumpadDecimal') { e.preventDefault(); return cancelar(); }
   }
