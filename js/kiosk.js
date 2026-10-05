@@ -540,19 +540,20 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
           const lim = Number(S.config.reconhecimento.limiar ?? 0.5);
           if (outro && outro.aluno !== aluno.id && outro.distancia <= lim - 0.05) {
             const o = S.alunos.get(outro.aluno);
-            observacao = `Atenção: rosto muito semelhante ao cadastro de ${o?.n || 'outro aluno'} (${o?.m || ''}). Foto não usada como referência.`;
+            observacao = `Atenção: rosto muito semelhante ao cadastro de ${o?.n || 'outro aluno'} (${o?.m || ''}). Foto enviada para "Validar rostos"; só vira referência depois de aprovada.`; descritor = r.descritor; S.duvidaFace = true;
           } else descritor = r.descritor;
         }
       } catch (e) { console.warn('descritor', e); }
     }
     S.descFacial = null;
-    const confirmada = !!descritor;   // identidade confirmada com ENTER: a referência já nasce válida
+    const duvida = !!S.duvidaFace; S.duvidaFace = false; // rosto parecido com o de outro aluno: a foto fica pendente em "Validar rostos"
+    const confirmada = !!descritor && !duvida;   // identidade confirmada com ENTER: a referência já nasce válida
 
     const agora = relogio.agora();
     const it = {
       id: uuid(), aluno_id: aluno.id, matricula: aluno.m, registrado_em: agora.toISOString(), data: isoDe(agora), tipo,
       hora: horaDe(agora), metodo, distancia: distancia ?? null, foto: cap?.dataUrl || null, justificativa, observacao,
-      descritor, confirmada, registrado: false, fotoId: null, tentativasFoto: 0, faceFeita: !descritor, offline: false, criado: Date.now()
+      descritor, confirmada, duvida, registrado: false, fotoId: null, tentativasFoto: 0, faceFeita: !descritor, offline: false, criado: Date.now()
     };
     S.emEnvio.add(it.id);
     let r;
@@ -569,7 +570,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
       } else await idb.del('fila', it.id);
     } finally { S.emEnvio.delete(it.id); }
     if (r.status === 'ok') {
-      if (descritor) {
+      if (descritor && confirmada) {
         // referências do aluno = cadastro (SUAP e/ou foto de cadastro) + último registro
         const cad = metodo === 'cpf';
         S.rec.itens = S.rec.itens.filter((x) => !(x.a === aluno.id && (x.o === 'webcam' || (cad && x.o === 'manual'))));
@@ -624,8 +625,9 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
           if (!it.faceFeita && (it.fotoId || it.tentativasFoto >= 3 || !gasConfigurado())) {
             // pelo CPF a foto vira a do cadastro; pelo rosto ela é só o "último registro" (o cadastro fica como está)
             const cad = it.metodo === 'cpf';
-            await api('salvar_face', { p_aluno_id: it.aluno_id, p_descriptor: it.descritor, p_origem: cad ? 'cpf' : 'webcam', p_foto_id: it.fotoId, p_confirmada: !!it.confirmada });
-            const a = S.alunos.get(it.aluno_id); if (a && it.fotoId && (cad || (!a.fb && !a.fs))) a.fb = it.fotoId;
+            if (it.duvida) await proporFaceDuvidosa(it);
+          else await api('salvar_face', { p_aluno_id: it.aluno_id, p_descriptor: it.descritor, p_origem: cad ? 'cpf' : 'webcam', p_foto_id: it.fotoId, p_confirmada: !!it.confirmada });
+            const a = S.alunos.get(it.aluno_id); if (a && it.fotoId && !it.duvida && (cad || (!a.fb && !a.fs))) a.fb = it.fotoId;
             it.faceFeita = true; await idb.put('fila', it.id, it);
           }
           if (it.registrado && (!it.foto || it.fotoAnexada) && it.faceFeita) await idb.del('fila', it.id);
@@ -968,4 +970,21 @@ function montarApoio(raiz, { aoSair, disp, canalRt, ativo, aoAssumir }) {
   }
   marcarCon();
   return limpar;
+}
+
+// Rosto muito parecido com o de outro aluno (registro pelo CPF): a foto não vira referência direto.
+// Ela vai para "Validar rostos" como pendente e só passa a valer depois que o administrador aprovar.
+async function proporFaceDuvidosa(it) {
+  if (it.metodo !== 'cpf' || !it.fotoId) return; // sem foto guardada não há o que validar
+  const base = { p_aluno_id: it.aluno_id, p_descriptor: it.descritor, p_foto_id: it.fotoId };
+  try { await api('salvar_face', { ...base, p_origem: 'cpf', p_confirmada: false }); }
+  catch (e) {
+    if (e.rede) throw e; // sem internet: tenta de novo depois
+    // banco ainda sem a pendência pelo CPF: o operador propõe pela via que já existe (fica pendente);
+    // com administrador no balcão nada é gravado, porque por essa via a foto seria aprovada na hora
+    if (sessao.perfil === 'operador') {
+      try { await api('salvar_face', { ...base, p_origem: 'manual', p_confirmada: false }); }
+      catch (e2) { if (e2.rede) throw e2; console.warn('face duvidosa', e2); }
+    }
+  }
 }
