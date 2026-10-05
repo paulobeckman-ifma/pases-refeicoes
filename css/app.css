@@ -291,3 +291,108 @@ button.pilula.clicavel:hover { filter: brightness(1.2); }
 .lista-hoje li { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--linha, #e3e8e5); }
 .lista-hoje .hora { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 48px; }
 .lista-hoje .nome { flex: 1; }
+
+/* ================================================================ v1.13: tema claro/escuro e celular
+   O tema fica em <html data-tema="claro|escuro"> (botão no menu e na tela de login).
+   O balcão tem cores próprias e não muda com o tema. */
+:root { --superficie: #ffffff; --superficie-2: #fafbfa; --linha-suave: #eef2f0; --neutro: #eef1f0; color-scheme: light; }
+:root[data-tema=escuro] {
+  color-scheme: dark;
+  --verde: #37ad4d; --verde-escuro: #8fe0a0; --verde-claro: #16301c;
+  --vermelho: #ff7b7f; --vermelho-claro: #3b1b1c;
+  --ambar: #f2b955; --ambar-claro: #3a2c10;
+  --azul: #86b8f2; --azul-claro: #15283e;
+  --tinta: #e9efeb; --tinta-2: #bcc8c1; --tinta-3: #8f9b94;
+  --linha: #2c3731; --fundo: #0f1512; --cartao: #18201c;
+  --superficie: #18201c; --superficie-2: #1e2823; --linha-suave: #242d28; --neutro: #27312c;
+  --sombra: 0 1px 2px rgba(0, 0, 0, .45), 0 4px 16px rgba(0, 0, 0, .3);
+}
+.legenda { flex-wrap: wrap; }
+.usuario-box .btn svg { width: 15px; height: 15px; }
+
+/* superfícies que eram brancas fixas */
+[data-tema=escuro] :is(.shell, .fundo-modal, .tela-login) :is(.lateral, .kpi, .tabela-wrap, .modal, .modal header, .modal footer, .login-cartao, .item-busca) { background: var(--superficie); }
+[data-tema=escuro] .tela-login { background: radial-gradient(circle at 20% 10%, #15301c, transparent 40%), var(--fundo); }
+[data-tema=escuro] :is(.shell, .fundo-modal, .tela-login) .btn:not(.primario):not(.fantasma) { background: var(--superficie-2); border-color: var(--linha); color: var(--tinta); }
+[data-tema=escuro] :is(.shell, .fundo-modal, .tela-login) .btn:not(.primario):not(.fantasma):hover { background: #28332d; border-color: #414e47; }
+[data-tema=escuro] :is(.shell, .fundo-modal, .tela-login) .btn.fantasma { color: var(--tinta-2); }
+[data-tema=escuro] :is(.shell, .fundo-modal, .tela-login) .btn.fantasma:hover { color: var(--tinta); }
+[data-tema=escuro] :is(.shell, .fundo-modal, .tela-login) .btn.perigo:not(.primario) { color: var(--vermelho); border-color: #5c2c2e; }
+[data-tema=escuro] :is(.shell, .fundo-modal, .tela-login) .btn.perigo:not(.primario):hover { background: var(--vermelho-claro); }
+[data-tema=escuro] :is(.shell, .fundo-modal, .tela-login) .btn.primario { color: #fff; }
+[data-tema=escuro] :is(.shell, .fundo-modal, .tela-login) .btn.primario:hover { background: #2f9e41; }
+[data-tema=escuro] :is(.shell, .fundo-modal, .tela-login) :is(input[type=text], input[type=password], input[type=date], input[type=time], input[type=number], input[type=search], input[type=datetime-local], select, textarea) { background: #111814; border-color: var(--linha); color: var(--tinta); }
+[data-tema=escuro] :is(.shell, .fundo-modal) .nav a:hover { background: var(--superficie-2); }
+[data-tema=escuro] :is(.shell, .fundo-modal) .nav a .contagem,
+[data-tema=escuro] :is(.shell, .fundo-modal) .selo.vermelho { background: #c81a20; color: #fff; }
+[data-tema=escuro] :is(.shell, .fundo-modal) .selo:not(.verde):not(.vermelho):not(.vermelho-suave):not(.ambar):not(.azul) { background: var(--neutro); }
+[data-tema=escuro] :is(.shell, .fundo-modal) .tabela th { background: var(--superficie-2); }
+[data-tema=escuro] :is(.shell, .fundo-modal) .tabela td { border-bottom-color: var(--linha-suave); }
+[data-tema=escuro] :is(.shell, .fundo-modal) .tabela tbody tr.clicavel:hover td { background: #202a25; }
+[data-tema=escuro] :is(.shell, .fundo-modal) .tabela tr.excluido td { background: #1b211e; }
+[data-tema=escuro] :is(.shell, .fundo-modal) .grafico .eixo { stroke: #414e47; }
+[data-tema=escuro] :is(.shell, .fundo-modal) .grafico .grade-h { stroke: #28322d; }
+[data-tema=escuro] :is(.shell, .fundo-modal) .foto-box:not(.sem), [data-tema=escuro] :is(.shell, .fundo-modal) .miniatura { background: #222c27; }
+[data-tema=escuro] :is(.shell, .fundo-modal) .item-busca:hover { background: #202a25; }
+[data-tema=escuro] :is(.shell, .fundo-modal, .tela-login) .caixa.info { color: #c2dbf8; }
+[data-tema=escuro] :is(.shell, .fundo-modal, .tela-login) .caixa.aviso-caixa { color: #f5d596; }
+[data-tema=escuro] :is(.shell, .fundo-modal, .tela-login) .caixa.erro-caixa { color: #ffc0c2; }
+[data-tema=escuro] .dica { background: #e9efeb; color: #0f1512; }
+[data-tema=escuro] .aviso { background: #2b352f; color: #fff; }
+[data-tema=escuro] .aviso.erro { background: #a8191e; }
+[data-tema=escuro] .aviso.ok { background: #1f7a2f; }
+/* o cartão de resultado do balcão é sempre claro: mantém a tinta escura mesmo com o tema escuro ligado */
+[data-tema=escuro] .balcao .resultado-cartao { --tinta: #1c2320; --tinta-2: #4b5651; --tinta-3: #7b8681; --vermelho: #c81a20; --ambar: #b86e00; --verde: #2f9e41; }
+
+/* ---------------------------------------------------------------- celular */
+@media (max-width: 860px) {
+  body { font-size: 14.5px; }
+  h1 { font-size: 19px; }
+  h2 { font-size: 16px; }
+  .lateral { inset: 0 auto 0 0; width: min(290px, 84vw); padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+  .conteudo { padding: 12px 12px calc(40px + env(safe-area-inset-bottom)); }
+  .cabecalho { align-items: center; gap: 10px; margin-bottom: 12px; }
+  .cabecalho > div:not(.linha-flex) { flex: 1; min-width: 0; }
+  .cabecalho p { font-size: 12.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .cabecalho .linha-flex { width: 100%; gap: 8px; }
+  .cabecalho .linha-flex .btn { flex: 1 1 auto; justify-content: center; }
+  .menu-movel { padding: 9px 11px; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .kpi { padding: 10px 12px; }
+  .kpi b { font-size: 21px; white-space: normal; overflow-wrap: anywhere; }
+  .conteudo .fin .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .conteudo .fin .kpi b { font-size: 18px; white-space: normal; }
+  .barra-filtros { gap: 8px; }
+  .barra-filtros .campo { min-width: 0; flex: 1 1 140px; }
+  .barra-filtros > .linha-flex { flex: 1 1 100%; }
+  .barra-filtros > .linha-flex .campo { flex: 1 1 140px; }
+  .barra-filtros .btn { flex: 1 1 auto; justify-content: center; }
+  /* 16px evita o zoom automático do iPhone ao tocar num campo */
+  input[type=text], input[type=password], input[type=date], input[type=time], input[type=number], input[type=search], input[type=datetime-local], select, textarea { font-size: 16px; }
+  .cartao { padding: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .cartao + .cartao { margin-top: 12px; }
+  /* gráficos mantêm tamanho legível e rolam para o lado dentro do cartão */
+  .grafico { min-width: 540px; }
+  table.tabela { font-size: 13px; }
+  .tabela th { padding: 8px; font-size: 11px; }
+  .tabela td { padding: 7px 8px; }
+  .abas { margin-bottom: 12px; }
+  .abas button { padding: 9px 11px; }
+  .fundo-modal { padding: 8px; align-items: end; }
+  .modal, .modal.largo { width: 100%; max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); border-radius: 14px 14px 10px 10px; }
+  .modal header, .modal .corpo, .modal footer { padding-left: 14px; padding-right: 14px; }
+  .modal footer { flex-wrap: wrap; }
+  .modal footer .btn { flex: 1 1 auto; justify-content: center; }
+  .dl { grid-template-columns: 112px 1fr; }
+  .cards-faces { grid-template-columns: 1fr; }
+  .avisos { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .aviso { max-width: none; }
+  .fin-nav h2 { font-size: 14.5px; }
+  .fin-seg button { padding: 7px 10px; }
+  .paginacao { flex-wrap: wrap; justify-content: center; }
+  .login-cartao { padding: 22px 18px; }
+}
+@media (max-width: 420px) {
+  .fotos-par { gap: 8px; }
+  .kpi span { font-size: 12px; }
+}
