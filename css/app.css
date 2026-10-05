@@ -371,8 +371,8 @@ button.pilula.clicavel:hover { filter: brightness(1.2); }
   input[type=text], input[type=password], input[type=date], input[type=time], input[type=number], input[type=search], input[type=datetime-local], select, textarea { font-size: 16px; }
   .cartao { padding: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .cartao + .cartao { margin-top: 12px; }
-  /* gráficos mantêm tamanho legível e rolam para o lado dentro do cartão */
-  .grafico { min-width: 540px; }
+  /* os gráficos são desenhados mais estreitos no celular (graficos.js) e cabem inteiros na tela */
+  .grafico { min-width: 0; }
   table.tabela { font-size: 13px; }
   .tabela th { padding: 8px; font-size: 11px; }
   .tabela td { padding: 7px 8px; }
@@ -396,3 +396,6 @@ button.pilula.clicavel:hover { filter: brightness(1.2); }
   .fotos-par { gap: 8px; }
   .kpi span { font-size: 12px; }
 }
+
+/* v1.13.1: no celular o balcão não é usado, então o atalho do Painel some */
+@media (max-width: 860px) { a.btn[href="#/balcao"] { display: none !important; } }
