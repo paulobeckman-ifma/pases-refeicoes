@@ -280,7 +280,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     const margem = m ? m.segundo - m.distancia : 0;
     // casamento apertado (ate 0,36) aceita folga normal; casamento folgado so vale com folga grande para o segundo
       // colocado. Isso evita registrar um aluno no nome de outro parecido (caso real: dist. 0,39 com folga de 0,07).
-      const bateu = m && S.alunos.has(m.aluno) && m.distancia <= lim && margem >= (m.distancia <= 0.36 ? 0.06 : 0.12);
+      const bateu = m && S.alunos.has(m.aluno) && m.distancia <= Math.min(lim, 0.45) && margem >= (m.distancia <= 0.36 ? 0.06 : 0.10);
     if (bateu) {
       c.seq = c.cand === m.aluno ? c.seq + 1 : 1; c.cand = m.aluno;
       mostrarRosto(rosto, '#35d05a');
@@ -314,7 +314,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
   function mensagemConfirmar(a, distancia) {
     const troca = S.tipoSel !== modalidadeDe(a);
     mensagem(`${a.n} · ${a.m || ''} · ${TIPO[S.tipoSel]}${troca ? ` (troca: cadastro é ${TIPO[modalidadeDe(a)]})` : ''}`,
-      `${distancia != null ? `semelhança ${semelhanca(distancia)}% · ` : 'pelo CPF · '}1 almoço · 2 lanche · ${distancia === null ? 'ATENDENTE: confira se o aluno está diante da câmera e aperte ENTER no teclado do notebook' : 'ENTER confirma'} · ESC se não for ele(a)`);
+      `${distancia != null ? `semelhança ${semelhanca(distancia)}% · ` : 'pelo CPF · '}1 almoço · 2 lanche · ${distancia === null ? 'ATENDENTE: confira se o aluno está diante da câmera e aperte ENTER no teclado do notebook' : distancia > 0.36 ? 'SEMELHANÇA MEDIANA · ATENDENTE: confira se é este aluno e aperte ENTER no teclado do notebook' : 'ENTER confirma'} · ESC se não for ele(a)`);
   }
   // antes do ENTER o aluno pode trocar: tecla 1 = refeição, 2 = lanche (sem escolha, vale o cadastro)
   function escolherTipo(t) {
@@ -325,7 +325,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     tela({ tipo: 'estado', estado: 'confirmar', ...telaEscolha(c.aluno, S.fotoCand, c.distancia) });
   }
   function definirEstado(est, extra = {}) {
-    S.estado = est; clearTimeout(S.confirmarTimer);
+    S.estado = est; window.__balcaoEstado = est; clearTimeout(S.confirmarTimer);
     if (est !== 'confirmar') S.tipoSel = null;
     mostrarTipos(est === 'confirmar');
     if (est !== 'capturando' && est !== 'confirmar') mostrarRosto(null);
@@ -358,7 +358,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
 
   async function reconhecido(aluno, distancia) {
     S.candidato = { aluno, distancia };
-    S.candidato = { aluno, distancia, metodo: 'facial' };
+    S.candidato = { aluno, distancia, metodo: 'facial', atendente: !(distancia <= 0.36) }; S.confPasso = 1; // semelhanca mediana: quem confirma e o atendente
     if (S.hoje.has(aluno.id)) return resultado('duplicado', { aluno, hora: S.hoje.get(aluno.id), tipo: S.hojeTipo.get(aluno.id) });
     if (!aluno.at) return resultado('inativo', { aluno });
     const fotoCad = await fotoRapida(aluno.fb || aluno.fs);
@@ -371,7 +371,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
   const modalidadeDe = (aluno) => (aluno.md === 'lanche' ? 'lanche' : 'refeicao');
   function telaEscolha(aluno, foto, distancia = null) {
     return { nome: aluno.n, matricula: aluno.m, curso: aluno.c, foto, semelhanca: distancia != null ? semelhanca(distancia) : null,
-      tipoSel: S.tipoSel, md: modalidadeDe(aluno), porCpf: S.candidato?.metodo === 'cpf', passo: S.confPasso || 1, confirmar: S.config.reconhecimento.confirmar !== false };
+      tipoSel: S.tipoSel, md: modalidadeDe(aluno), porCpf: S.candidato?.metodo === 'cpf', atendente: S.candidato?.metodo === 'cpf' || !!S.candidato?.atendente, passo: S.confPasso || 1, confirmar: S.config.reconhecimento.confirmar !== false };
   }
   // vale o que estiver selecionado ao apertar ENTER (cadastro, ou a troca feita com 1/2)
   function confirmarEscolha() {
@@ -406,7 +406,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     if (S.estado === 'confirmar' && S.candidato) {
       // pelo CPF quem confirma e o atendente (ENTER do teclado do notebook ou o OK da tela): ele confere se o aluno
       // esta diante da camera. O ENTER do tecladinho numerico do aluno so avisa que ele terminou de digitar.
-      if (S.candidato.metodo === 'cpf' && quem === 'aluno') {
+      if ((S.candidato.metodo === 'cpf' || S.candidato.atendente) && quem === 'aluno') {
         if (S.confPasso !== 2) {
           const c = S.candidato; S.confPasso = 2; mensagemConfirmar(c.aluno, c.distancia);
           tela({ tipo: 'estado', estado: 'confirmar', ...telaEscolha(c.aluno, S.fotoCand, c.distancia) });
@@ -422,6 +422,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     }
   }
   async function buscarCpf() {
+    S.trocaObs = null;
     if (S.estado !== 'cpf' || S.cpf.length !== 11) return;
     const cpf = S.cpf;
     if (!cpfValido(cpf)) return resultado('cpf_invalido', {});
@@ -449,7 +450,17 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     S.fotoCand = await fotoRapida(aluno.fb || aluno.fs);
     S.tipoSel = modalidadeDe(aluno);
     enviarQuadro();   // o apoio vê quem está diante da câmera ao confirmar pelo CPF
+    // alerta de troca provavel: quem digita o CPF agora parece a mesma pessoa que acabou de ser registrada pelo rosto com outro nome
+    const uf = S.ultFacial, vivo = S.ultimoRosto; let troca = null;
+    if (uf && uf.aluno.id !== aluno.id && Date.now() - uf.t < 180000 && vivo && vivo.desc && Date.now() - vivo.t < 5000) {
+      let s = 0; for (let i = 0; i < 128; i++) { const x = vivo.desc[i] - uf.desc[i]; s += x * x; }
+      if (Math.sqrt(s) <= 0.4) troca = uf;
+    }
     definirEstado('confirmar', { aluno, distancia: null, tela: telaEscolha(aluno, S.fotoCand) });
+    if (troca) {
+      S.trocaObs = `Troca provável: a mesma pessoa foi registrada pelo rosto às ${troca.hora} como ${troca.aluno.n} (${troca.aluno.m || ''}). Conferir aquele registro.`;
+      modal({ titulo: 'Atenção: troca provável', corpo: `<p style="margin:0">Quem está na câmera agora parece ser a mesma pessoa registrada às <b>${esc(troca.hora)}</b> como <b>${esc(troca.aluno.n)}</b> pelo reconhecimento facial.</p><p style="margin:0">Se foi engano, confirme o registro de <b>${esc(aluno.n)}</b> e avise a coordenação para corrigir o registro de ${esc(troca.aluno.n)}. O aviso fica anotado na observação.</p>`, botoes: [{ texto: 'Entendi (ESC)', classe: 'primario' }] });
+    }
   }
   function cancelar() {
     if (S.estado === 'resultado') return fecharResultado();
@@ -562,7 +573,9 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
     const duvida = !!S.duvidaFace; S.duvidaFace = false; // rosto parecido com o de outro aluno: a foto fica pendente em "Validar rostos"
     // reconhecimento folgado nao vira "ultimo registro": se a pessoa for outra, a referencia errada se reforcaria sozinha
     const fraco = metodo === 'facial' && !(distancia <= 0.36);
-    const confirmada = !!descritor && !duvida && !fraco;   // identidade confirmada com ENTER: a referência já nasce válida
+    const confirmada = !!descritor && !duvida && !fraco;
+    if (S.trocaObs && metodo === 'cpf') observacao = (observacao ? observacao + ' ' : '') + S.trocaObs;
+    S.trocaObs = null;   // identidade confirmada com ENTER: a referência já nasce válida
 
     const agora = relogio.agora();
     const it = {
@@ -585,6 +598,7 @@ function montarPrincipal(raiz, { aoSair, disp, canalRt, aoPerder }) {
       } else await idb.del('fila', it.id);
     } finally { S.emEnvio.delete(it.id); }
     if (r.status === 'ok') {
+      if (metodo === 'facial' && descritor) S.ultFacial = { aluno, desc: descritor, t: Date.now(), hora: String(it.hora || '').slice(0, 5) }; // guardado para o alerta de troca provavel
       if (descritor && confirmada) {
         // referências do aluno = cadastro (SUAP e/ou foto de cadastro) + último registro
         const cad = metodo === 'cpf';
@@ -1003,3 +1017,16 @@ async function proporFaceDuvidosa(it) {
     }
   }
 }
+
+// Atualização automática do balcão: a página fica aberta o dia inteiro, então a cada 5 minutos confere se saiu
+// versão nova e recarrega sozinha quando o balcão está parado (aguardando). A fila de registros fica guardada no computador.
+let _versaoBalcao = null;
+setInterval(async () => {
+  try {
+    if (!document.querySelector('.balcao') || !navigator.onLine) return;
+    const marcas = await Promise.all(['js/kiosk.js', 'js/tela-aluno.js'].map((u) => fetch(u, { method: 'HEAD', cache: 'no-store' }).then((r) => r.headers.get('etag') || r.headers.get('last-modified') || '')));
+    const v = marcas.join('|'); if (v === '|') return;
+    if (_versaoBalcao === null) { _versaoBalcao = v; return; }
+    if (v !== _versaoBalcao && window.__balcaoEstado === 'aguardando' && !document.querySelector('.fundo-modal')) location.reload();
+  } catch { /* sem internet: tenta de novo depois */ }
+}, 300000);
