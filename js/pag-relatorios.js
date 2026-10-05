@@ -19,7 +19,7 @@ export async function render(el, { cabecalho, perfil }) {
   let ordem = { chave: 'total', desc: true };
 
   el.innerHTML = cabecalho('Relatórios', 'Resumos por período, aluno, curso, dia e horário. Exporte em CSV (abre no Excel) ou imprima.',
-    `<label class="check" title="Acrescenta à impressão a lista de todos os registros do período filtrado"><input type="checkbox" id="rel-det"> Incluir registros detalhados na impressão</label><button class="btn" id="rel-imp">${ico('imprimir')} Imprimir</button><button class="btn" id="rel-csv">${ico('baixar')} Exportar CSV desta aba</button>`) + `
+    `<label class="check" title="Imprime os gráficos da aba aberta"><input type="checkbox" id="rel-graf" checked> Incluir gráficos</label><label class="check" title="Imprime o cartão Leitura rápida do Resumo"><input type="checkbox" id="rel-leit" checked> Incluir leitura rápida</label><label class="check" title="Acrescenta à impressão a lista de todos os registros do período filtrado"><input type="checkbox" id="rel-det"> Incluir registros detalhados na impressão</label><button class="btn" id="rel-imp">${ico('imprimir')} Imprimir</button><button class="btn" id="rel-csv">${ico('baixar')} Exportar CSV desta aba</button>`) + `
     <div class="barra-filtros">
       <div class="linha-flex" id="rel-periodo"></div>
       <label class="campo"><span>Tipo</span><select id="rel-tipo"><option value="">Almoço e lanche</option><option value="refeicao">Só almoço</option><option value="lanche">Só lanche</option></select></label>
@@ -29,6 +29,10 @@ export async function render(el, { cabecalho, perfil }) {
       <label class="campo"><span>Método</span><select id="rel-metodo"><option value="">Todos</option><option value="facial">Facial</option><option value="cpf">CPF</option><option value="manual">Manual</option></select></label>
       <label class="campo"><span>Dias da semana</span><select id="rel-dias"><option value="">Todos</option><option value="uteis">Só dias úteis (seg a sex)</option></select></label>
     </div>
+    <style>@media print {
+      #rel-corpo.sem-graf-imp .cartao:has(svg.grafico), #rel-corpo.sem-graf-imp .legenda { display: none !important; }
+      #rel-corpo.sem-leit-imp .rel-leitura { display: none !important; }
+    }</style>
     <div class="so-impressao"><h2 id="rel-titulo-imp"></h2></div>
     <div class="abas" id="rel-abas">
       ${ABAS.map(([k, t]) => `<button data-aba="${k}" class="${k === aba ? 'ativo' : ''}">${t}</button>`).join('')}
@@ -266,7 +270,7 @@ export async function render(el, { cabecalho, perfil }) {
     if (fora || sf) L.push(`Atenção: ${[fora && `${fora} almoço(s) fora do horário`, sf && `${sf} registro(s) sem foto`].filter(Boolean).join(' e ')}. Detalhes na aba "Ocorrências".`);
 
     return `<div class="kpis">${kpis}</div>
-      ${L.length ? `<div class="cartao" style="margin-bottom:16px"><h2>Leitura rápida</h2><ul style="margin:8px 0 0;padding-left:20px;line-height:1.7">${L.map((x) => `<li>${x}</li>`).join('')}</ul></div>` : ''}
+      ${L.length ? `<div class="cartao rel-leitura" style="margin-bottom:16px"><h2>Leitura rápida</h2><ul style="margin:8px 0 0;padding-left:20px;line-height:1.7">${L.map((x) => `<li>${x}</li>`).join('')}</ul></div>` : ''}
       ${graficos}`;
   }
 
@@ -328,6 +332,13 @@ export async function render(el, { cabecalho, perfil }) {
         return [fmtData(r.dt), r.h.slice(0, 5), TIPO[r.tp || 'refeicao'], esc(a.nome || ''), esc(a.matricula || ''), esc(perfil === 'admin' ? fmtCpf(a.cpf || '') : (a.cpf || '')),
           esc(turmaDe(a.matricula)), r.tp === 'lanche' ? 'livre' : r.dh ? 'dentro' : 'fora']; }), []);
   }
-  $('#rel-imp').onclick = () => { detalhada(); setTimeout(() => window.print(), 50); };
+  // caixinhas da impressão: gráficos e leitura rápida entram ou não no papel (na tela nada muda)
+  const marcarImp = () => { $('#rel-corpo').classList.toggle('sem-graf-imp', !$('#rel-graf').checked); $('#rel-corpo').classList.toggle('sem-leit-imp', !$('#rel-leit').checked); };
+  for (const [id, chave] of [['#rel-graf', 'pases_rel_imp_graf'], ['#rel-leit', 'pases_rel_imp_leit']]) {
+    $(id).checked = sessionStorage.getItem(chave) !== '0';
+    $(id).onchange = () => { sessionStorage.setItem(chave, $(id).checked ? '1' : '0'); marcarImp(); };
+  }
+  marcarImp();
+  $('#rel-imp').onclick = () => { marcarImp(); detalhada(); setTimeout(() => window.print(), 50); };
   window.addEventListener('afterprint', () => { $('#rel-detalhe') && ($('#rel-detalhe').innerHTML = ''); }, { once: false });
 }
