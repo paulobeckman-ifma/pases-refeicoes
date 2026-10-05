@@ -3,36 +3,40 @@ import { $, $$, esc, ico, aviso, CFG } from './util.js';
 import { rpc, api, sessao, relogio, traduzir } from './api.js';
 import { montarBalcao } from './kiosk.js';
 
-export const VERSAO = '1.11.0';
+export const VERSAO = '1.12.0';
 const raiz = $('#app');
 let desmontar = null;
 
+// ícone do módulo Financeiro (moeda), no mesmo traço dos demais
+const ICO_MOEDA = '<svg class="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9.2A3.2 2.2 0 0 0 12 8c-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2a3.2 2.2 0 0 1-3-1.2M12 6v2m0 8v2"/></svg>';
+
 const ROTAS = {
-  painel:        { titulo: 'Painel', icone: 'casa', perfis: ['admin', 'consulta'], carregar: () => import('./pag-painel.js') },
-  balcao:        { titulo: 'Balcão', icone: 'balcao', perfis: ['admin', 'operador'], balcao: true },
-  registros:     { titulo: 'Registros', icone: 'lista', perfis: ['admin', 'consulta', 'operador'], carregar: () => import('./pag-registros.js') },
-  relatorios:    { titulo: 'Relatórios', icone: 'grafico', perfis: ['admin', 'consulta', 'operador'], carregar: () => import('./pag-relatorios.js') },
-  alunos:        { titulo: 'Alunos', icone: 'usuarios', perfis: ['admin', 'consulta', 'operador'], carregar: () => import('./pag-alunos.js') },
-  trocas:        { titulo: 'Trocas', icone: 'atualizar', perfis: ['admin', 'consulta'], carregar: () => import('./pag-trocas.js') },
-  faces:         { titulo: 'Validar rostos', icone: 'rosto', perfis: ['admin'], carregar: () => import('./pag-faces.js') },
-  usuarios:      { titulo: 'Usuários', icone: 'chave', perfis: ['admin'], carregar: () => import('./pag-usuarios.js') },
+  painel: { titulo: 'Painel', icone: 'casa', perfis: ['admin', 'consulta'], carregar: () => import('./pag-painel.js') },
+  balcao: { titulo: 'Balcão', icone: 'balcao', perfis: ['admin', 'operador'], balcao: true },
+  registros: { titulo: 'Registros', icone: 'lista', perfis: ['admin', 'consulta', 'operador'], carregar: () => import('./pag-registros.js') },
+  relatorios: { titulo: 'Relatórios', icone: 'grafico', perfis: ['admin', 'consulta', 'operador'], carregar: () => import('./pag-relatorios.js') },
+  financeiro: { titulo: 'Financeiro', icone: 'moeda', svg: ICO_MOEDA, perfis: ['admin'], carregar: () => import('./pag-financeiro.js') },
+  alunos: { titulo: 'Alunos', icone: 'usuarios', perfis: ['admin', 'consulta', 'operador'], carregar: () => import('./pag-alunos.js') },
+  trocas: { titulo: 'Trocas', icone: 'atualizar', perfis: ['admin', 'consulta'], carregar: () => import('./pag-trocas.js') },
+  faces: { titulo: 'Validar rostos', icone: 'rosto', perfis: ['admin'], carregar: () => import('./pag-faces.js') },
+  usuarios: { titulo: 'Usuários', icone: 'chave', perfis: ['admin'], carregar: () => import('./pag-usuarios.js') },
   configuracoes: { titulo: 'Configurações', icone: 'config', perfis: ['admin', 'consulta', 'operador'], carregar: () => import('./pag-config.js') },
-  auditoria:     { titulo: 'Auditoria', icone: 'historico', perfis: ['admin'], carregar: () => import('./pag-auditoria.js') },
-  conta:         { titulo: 'Minha conta', icone: 'usuario', perfis: ['admin', 'operador', 'consulta'], carregar: null }
+  auditoria: { titulo: 'Auditoria', icone: 'historico', perfis: ['admin'], carregar: () => import('./pag-auditoria.js') },
+  conta: { titulo: 'Minha conta', icone: 'usuario', perfis: ['admin', 'operador', 'consulta'], carregar: null }
 };
 const inicial = () => (sessao.perfil === 'operador' ? 'registros' : 'painel');
 
 // ------------------------------------------------------------------ login
 function telaLogin(msg = '') {
   raiz.innerHTML = `<div class="tela-login"><form class="login-cartao" autocomplete="on">
-      <img src="assets/logo-ifma.png" alt="IFMA Campus Imperatriz">
-      <h1>PASES</h1><p>Sistema de Gerenciamento de Refeições</p>
-      <label class="campo"><span>Usuário</span><input type="text" name="login" autocomplete="username" required autocapitalize="off"></label>
-      <label class="campo"><span>Senha</span><input type="password" name="senha" autocomplete="current-password" required></label>
-      <div class="caixa erro-caixa ${msg ? '' : 'oculto'}" data-erro>${esc(msg)}</div>
-      <button class="btn primario" style="justify-content:center;padding:11px">Entrar</button>
-      <small class="mudo" style="text-align:center">${esc(CFG.INSTITUICAO)} · v${VERSAO}</small>
-    </form></div>`;
+    <img src="assets/logo-ifma.png" alt="IFMA Campus Imperatriz">
+    <h1>PASES</h1><p>Sistema de Gerenciamento de Refeições</p>
+    <label class="campo"><span>Usuário</span><input type="text" name="login" autocomplete="username" required autocapitalize="off"></label>
+    <label class="campo"><span>Senha</span><input type="password" name="senha" autocomplete="current-password" required></label>
+    <div class="caixa erro-caixa ${msg ? '' : 'oculto'}" data-erro>${esc(msg)}</div>
+    <button class="btn primario" style="justify-content:center;padding:11px">Entrar</button>
+    <small class="mudo" style="text-align:center">${esc(CFG.INSTITUICAO)} · v${VERSAO}</small>
+  </form></div>`;
   const f = $('form', raiz);
   $('input[name=login]', f).focus();
   f.onsubmit = async (e) => {
@@ -57,7 +61,7 @@ function shell(rota) {
     <aside class="lateral" id="lateral">
       <div class="marca"><img src="assets/simbolo-ifma.png" alt=""><div><b>PASES</b><small>Gerenciamento de Refeições</small></div></div>
       <nav class="nav">${Object.entries(ROTAS).filter(([, r]) => r.perfis.includes(u.perfil) && !(r.semMenu || []).includes(u.perfil)).map(([id, r]) =>
-        `<a href="#/${id}" class="${id === rota ? 'ativo' : ''}" data-rota="${id}">${ico(r.icone)}<span>${r.titulo}</span></a>`).join('')}</nav>
+        `<a href="#/${id}" class="${id === rota ? 'ativo' : ''}" data-rota="${id}">${r.svg || ico(r.icone)}<span>${r.titulo}</span></a>`).join('')}</nav>
       <div class="usuario-box"><b>${esc(u.nome)}</b><span class="mudo">${esc(u.login)} · ${esc(u.perfil)}</span><br>
         <a href="#" id="sair" class="btn fantasma pequeno" style="padding-left:0;margin-top:6px">${ico('sair')} Sair</a></div>
     </aside>
@@ -90,10 +94,10 @@ function paginaConta(el) {
     <div class="cartao" style="max-width:520px">
       ${u.deve_trocar_senha ? '<div class="caixa aviso-caixa" style="margin-bottom:12px">Defina uma nova senha para continuar.</div>' : ''}
       <h2>Trocar senha</h2><form class="grade" style="grid-template-columns:1fr;margin-top:12px" id="f-senha">
-        <label class="campo"><span>Senha atual</span><input type="password" name="atual" required autocomplete="current-password"></label>
-        <label class="campo"><span>Nova senha (mínimo 6 caracteres)</span><input type="password" name="nova" required minlength="6" autocomplete="new-password"></label>
-        <label class="campo"><span>Repita a nova senha</span><input type="password" name="rep" required autocomplete="new-password"></label>
-        <div><button class="btn primario">Salvar nova senha</button></div></form></div>`;
+      <label class="campo"><span>Senha atual</span><input type="password" name="atual" required autocomplete="current-password"></label>
+      <label class="campo"><span>Nova senha (mínimo 6 caracteres)</span><input type="password" name="nova" required minlength="6" autocomplete="new-password"></label>
+      <label class="campo"><span>Repita a nova senha</span><input type="password" name="rep" required autocomplete="new-password"></label>
+      <div><button class="btn primario">Salvar nova senha</button></div></form></div>`;
   $('#f-senha').onsubmit = async (e) => {
     e.preventDefault(); const f = e.target;
     if (f.nova.value !== f.rep.value) return aviso('As senhas não conferem.', 'erro');

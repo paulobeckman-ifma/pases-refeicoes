@@ -1,10 +1,12 @@
 // Relatórios: resumo, por aluno (frequência e ausências), por curso, por dia e por horário
+// (o financeiro saiu daqui e virou módulo próprio: pag-financeiro.js)
 import { $, $$, esc, ico, baixarCsv, fmtData, fmtDataCurta, DIAS_SEMANA, DIAS_CURTO, diaSemanaNum, addDias, fmtPct, pct, fmtNum, normalizar, debounce, modal, turmaDe, fmtCpf, TIPO } from './util.js';
 import { api } from './api.js';
 import * as D from './dados.js';
 import { barras } from './graficos.js';
 
 const METODO = { facial: 'Facial', cpf: 'CPF', manual: 'Manual' };
+const ABAS = [['resumo', 'Resumo'], ['aluno', 'Por aluno'], ['turma', 'Por turma'], ['curso', 'Por curso'], ['dia', 'Por dia'], ['horario', 'Por horário'], ['ocorrencias', 'Ocorrências']];
 
 export async function render(el, { cabecalho, perfil }) {
   const [alunos, cfg] = await Promise.all([D.alunos(), D.config()]);
@@ -12,9 +14,8 @@ export async function render(el, { cabecalho, perfil }) {
   const cursos = [...new Set(alunos.map((a) => a.curso).filter(Boolean))].sort();
   const niveis = [...new Set(alunos.map((a) => a.nivel).filter(Boolean))].sort();
   const turmas = [...new Set(alunos.map((a) => turmaDe(a.matricula)).filter(Boolean))].sort();
-  const admin = perfil === 'admin';
-  let periodo = null, bruto = [], R = [], aba = sessionStorage.getItem('pases_rel_aba') || 'resumo', fin = null;
-  if (aba === 'financeiro' && !admin) aba = 'resumo';
+  let periodo = null, bruto = [], R = [], aba = sessionStorage.getItem('pases_rel_aba') || 'resumo';
+  if (!ABAS.some(([k]) => k === aba)) aba = 'resumo';
   let ordem = { chave: 'total', desc: true };
 
   el.innerHTML = cabecalho('Relatórios', 'Resumos por período, aluno, curso, dia e horário. Exporte em CSV (abre no Excel) ou imprima.',
@@ -30,8 +31,7 @@ export async function render(el, { cabecalho, perfil }) {
     </div>
     <div class="so-impressao"><h2 id="rel-titulo-imp"></h2></div>
     <div class="abas" id="rel-abas">
-      ${[['resumo', 'Resumo'], ['aluno', 'Por aluno'], ['turma', 'Por turma'], ['curso', 'Por curso'], ['dia', 'Por dia'], ['horario', 'Por horário'], ['ocorrencias', 'Ocorrências'], ...(admin ? [['financeiro', 'Financeiro']] : [])]
-        .map(([k, t]) => `<button data-aba="${k}" class="${k === aba ? 'ativo' : ''}">${t}</button>`).join('')}
+      ${ABAS.map(([k, t]) => `<button data-aba="${k}" class="${k === aba ? 'ativo' : ''}">${t}</button>`).join('')}
     </div>
     <div id="rel-corpo"><div class="vazio">Carregando…</div></div>
     <div id="rel-detalhe" class="so-impressao"></div>`;
@@ -107,19 +107,9 @@ export async function render(el, { cabecalho, perfil }) {
   function desenhar() {
     $$('#rel-abas button').forEach((b) => b.classList.toggle('ativo', b.dataset.aba === aba));
     const c = $('#rel-corpo');
-    // aba Financeiro (só administrador): não usa os filtros do relatório; o módulo é carregado à parte
-    const ehFin = aba === 'financeiro' && admin;
-    el.querySelector('.barra-filtros').classList.toggle('oculto', ehFin);
-    $('#rel-det').closest('label').classList.toggle('oculto', ehFin);
-    if (ehFin) {
-      c.innerHTML = '<div class="vazio">Carregando…</div>';
-      import('./pag-financeiro.js').then((m) => { fin = m; if (aba === 'financeiro') return m.render(c); })
-        .catch((e) => { c.innerHTML = `<div class="caixa erro-caixa">${esc(e.message || e)}</div>`; });
-      return;
-    }
     if (aba === 'resumo') c.innerHTML = resumo();
     else if (aba === 'aluno') { c.innerHTML = `<div class="barra-filtros"><label class="campo" style="min-width:240px"><span>Buscar</span><input type="search" id="rel-busca" placeholder="Nome ou matrícula"></label>
-        <label class="campo"><span>Mostrar</span><select id="rel-mostrar"><option value="">Todos os ativos e atendidos</option><option value="zero">Só quem NÃO compareceu</option><option value="baixa">Frequência abaixo de 50%</option><option value="alta">Frequência de 80% ou mais</option></select></label></div><div id="rel-tab-aluno"></div>`;
+      <label class="campo"><span>Mostrar</span><select id="rel-mostrar"><option value="">Todos os ativos e atendidos</option><option value="zero">Só quem NÃO compareceu</option><option value="baixa">Frequência abaixo de 50%</option><option value="alta">Frequência de 80% ou mais</option></select></label></div><div id="rel-tab-aluno"></div>`;
       $('#rel-busca').oninput = debounce(desenharAlunos, 200); $('#rel-mostrar').onchange = desenharAlunos; desenharAlunos(); }
     else if (aba === 'curso' || aba === 'turma') c.innerHTML = tabelaHtml([aba === 'curso' ? 'Curso' : 'Turma', 'Ativos', 'Atendidos', 'Registros', 'Almoço', 'Lanche', 'Média por aluno atendido', 'Almoço fora do horário', 'Sem foto'],
       (aba === 'curso' ? tabelaCurso() : tabelaTurma()).map((x) => [esc(x.curso), x.ativos, `${x.atendidos} <small class="mudo">(${fmtPct(x.atendidos, x.ativos)})</small>`, `<b>${x.total}</b>`, x.refeicao, x.lanche, x.media.toFixed(1).replace('.', ','), x.fora, x.semfoto]), [1, 2, 3, 4, 5, 6, 7, 8]);
@@ -150,19 +140,19 @@ export async function render(el, { cabecalho, perfil }) {
       return { r: DIAS_CURTO[w], v: ds ? Math.round(n / ds) : 0, dica: `${DIAS_SEMANA[w]}: média de ${ds ? (n / ds).toFixed(1) : 0} por dia (${ds} dia(s))` }; }).filter((x, i) => i < 5 || x.v);
     const pd = tabelaDia();
     return `<div class="kpis">
-        <div class="kpi"><span>Registros</span><b>${fmtNum(R.length)}</b><small>${R.filter((r) => r.tp !== 'lanche').length} almoço · ${R.filter((r) => r.tp === 'lanche').length} lanche · ${dias.length} dia(s)</small></div>
-        <div class="kpi"><span>Média por dia</span><b>${dias.length ? (R.length / dias.length).toFixed(1).replace('.', ',') : 0}</b><small>nos dias com atendimento</small></div>
-        <div class="kpi"><span>Alunos atendidos</span><b>${atendidos}</b><small>${fmtPct(atendidos, ativosN)} dos ${ativosN} ativos</small></div>
-        <div class="kpi ${fora ? 'kpi-aviso' : ''}"><span>Almoço fora do horário</span><b>${fora}</b><small>${fmtPct(fora, R.length)} · janela ${esc(cfg.horario_inicio)}–${esc(cfg.horario_fim)}</small></div>
-        <div class="kpi ${sf ? 'kpi-alerta' : ''}"><span>Sem foto</span><b>${sf}</b><small>${fmtPct(sf, R.length)} dos registros</small></div>
-        <div class="kpi"><span>Reconhecimento facial</span><b>${fmtPct(fac, R.length)}</b><small>${fac} facial · ${R.length - fac - man} CPF · ${man} manual</small></div>
-      </div>
-      <div class="duas-col">
-        <div class="cartao"><h2>Atendimentos por dia</h2>${barras(pd.map((x) => ({ r: fmtDataCurta(x.data), v: x.total, dica: `${DIAS_CURTO[diaSemanaNum(x.data)]} ${fmtData(x.data)}: ${x.total}` })), { titulo: 'Atendimentos por dia' })}</div>
-        <div class="cartao"><h2>Média por dia da semana</h2>${barras(porSemana, { titulo: 'Média por dia da semana' })}</div>
-      </div>
-      <div class="cartao"><h2>Distribuição por horário</h2>${barras(tabelaHorario().map((x) => ({ r: x.inicio, v: x.total, classe: x.fora ? 'fora' : x.soLanche ? 'lanche' : '', dica: `${x.faixa}: ${x.total}${x.lanche ? ` (${x.lanche} lanche)` : ''}` })), { titulo: 'Por horário', altura: 180 })}
-        <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário</span><span><i style="background:#e0a33a"></i>almoço fora do horário</span><span><i style="background:#3b7dd8"></i>lanche</span></div></div>`;
+      <div class="kpi"><span>Registros</span><b>${fmtNum(R.length)}</b><small>${R.filter((r) => r.tp !== 'lanche').length} almoço · ${R.filter((r) => r.tp === 'lanche').length} lanche · ${dias.length} dia(s)</small></div>
+      <div class="kpi"><span>Média por dia</span><b>${dias.length ? (R.length / dias.length).toFixed(1).replace('.', ',') : 0}</b><small>nos dias com atendimento</small></div>
+      <div class="kpi"><span>Alunos atendidos</span><b>${atendidos}</b><small>${fmtPct(atendidos, ativosN)} dos ${ativosN} ativos</small></div>
+      <div class="kpi ${fora ? 'kpi-aviso' : ''}"><span>Almoço fora do horário</span><b>${fora}</b><small>${fmtPct(fora, R.length)} · janela ${esc(cfg.horario_inicio)}–${esc(cfg.horario_fim)}</small></div>
+      <div class="kpi ${sf ? 'kpi-alerta' : ''}"><span>Sem foto</span><b>${sf}</b><small>${fmtPct(sf, R.length)} dos registros</small></div>
+      <div class="kpi"><span>Reconhecimento facial</span><b>${fmtPct(fac, R.length)}</b><small>${fac} facial · ${R.length - fac - man} CPF · ${man} manual</small></div>
+    </div>
+    <div class="duas-col">
+      <div class="cartao"><h2>Atendimentos por dia</h2>${barras(pd.map((x) => ({ r: fmtDataCurta(x.data), v: x.total, dica: `${DIAS_CURTO[diaSemanaNum(x.data)]} ${fmtData(x.data)}: ${x.total}` })), { titulo: 'Atendimentos por dia' })}</div>
+      <div class="cartao"><h2>Média por dia da semana</h2>${barras(porSemana, { titulo: 'Média por dia da semana' })}</div>
+    </div>
+    <div class="cartao"><h2>Distribuição por horário</h2>${barras(tabelaHorario().map((x) => ({ r: x.inicio, v: x.total, classe: x.fora ? 'fora' : x.soLanche ? 'lanche' : '', dica: `${x.faixa}: ${x.total}${x.lanche ? ` (${x.lanche} lanche)` : ''}` })), { titulo: 'Por horário', altura: 180 })}
+      <div class="legenda"><span><i style="background:var(--verde)"></i>dentro do horário</span><span><i style="background:#e0a33a"></i>almoço fora do horário</span><span><i style="background:#3b7dd8"></i>lanche</span></div></div>`;
   }
 
   function desenharAlunos() {
@@ -197,7 +187,6 @@ export async function render(el, { cabecalho, perfil }) {
   }
 
   function exportar() {
-    if (aba === 'financeiro') return fin?.exportar();
     const nome = `pases_${aba}_${periodo.ini}_a_${periodo.fim}`;
     if (aba === 'aluno' || aba === 'resumo') baixarCsv(nome, ['aluno', 'matricula', 'turma', 'curso', 'ativo', 'registros', 'refeicao', 'lanche', 'frequencia_%', 'fora_do_horario', 'sem_foto', 'facial', 'ultima'],
       tabelaAluno().sort((a, b) => a.nome.localeCompare(b.nome)).map((x) => [x.nome, x.matricula, x.turma, x.curso, x.ativo ? 'sim' : 'não', x.total, x.refeicao, x.lanche, String(x.freq).replace('.', ','), x.fora, x.semfoto, x.facial, fmtData(x.ultima)]));
