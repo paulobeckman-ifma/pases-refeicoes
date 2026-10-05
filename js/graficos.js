@@ -11,13 +11,16 @@ function teto(v) {
   return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
 }
 const num = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(1).replace('.', ','));
+// No celular o gráfico é desenhado numa largura menor: cabe inteiro na tela e as letras continuam legíveis.
+export const telaEstreita = () => matchMedia('(max-width: 860px)').matches;
+const ajustar = (largura) => (telaEstreita() ? Math.min(largura, 420) : largura);
 
 /**
  * dados: [{ r: rótulo do eixo, v: valor, dica: texto, classe: 'fora' | '' }]
  */
 export function barras(dados, { altura = 220, largura = 760, rotuloMin = 40, titulo = '' } = {}) {
   if (!dados.length || !dados.some((d) => d.v > 0)) return '<div class="vazio">Sem registros no período.</div>';
-  const ml = 34, mr = 6, mt = 10, mb = 24, W = largura, H = altura;
+  const ml = 34, mr = 6, mt = 10, mb = 24, W = ajustar(largura), H = altura;
   const pw = W - ml - mr, ph = H - mt - mb, n = dados.length;
   const max = teto(Math.max(...dados.map((d) => d.v)));
   const passo = pw / n, gap = Math.max(2, Math.min(8, passo * 0.22)), bw = Math.max(2, passo - gap);
@@ -51,7 +54,7 @@ export function colunas(cats, series, { altura = 240, largura = 760, titulo = ''
   const topo = (c) => (empilhar ? c.v.reduce((s, x) => s + (x || 0), 0) : Math.max(0, ...c.v.map((x) => x || 0)));
   const maior = Math.max(0, ...cats.map(topo), ...linhas.flatMap((l) => l.v.map((x) => x || 0)));
   if (!cats.length || maior <= 0) return '<div class="vazio">Sem registros no período.</div>';
-  const ml = 40, mr = 8, mt = 18, mb = 26, W = largura, H = altura, pw = W - ml - mr, ph = H - mt - mb, n = cats.length;
+  const ml = 40, mr = 8, mt = 18, mb = 26, W = ajustar(largura), H = altura, pw = W - ml - mr, ph = H - mt - mb, n = cats.length;
   const max = teto(maior), passo = pw / n, ns = empilhar ? 1 : series.length;
   const gw = Math.max(2, Math.min(passo * 0.74, ns * 46)), bw = Math.max(1.5, gw / ns - (ns > 1 ? 2 : 0));
   const cada = Math.max(1, Math.ceil(n / Math.max(1, pw / rotuloMin)));
@@ -92,9 +95,11 @@ export function colunas(cats, series, { altura = 240, largura = 760, titulo = ''
  */
 export function barrasH(itens, { largura = 760, titulo = '', max = null, rotuloLarg = 230, cor = 'var(--verde)' } = {}) {
   if (!itens.length) return '<div class="vazio">Sem dados para este filtro.</div>';
-  const lh = 26, mt = 4, W = largura, H = itens.length * lh + mt * 2, textoLarg = 150, pw = W - rotuloLarg - textoLarg;
+  const estreita = telaEstreita(), W = ajustar(largura);
+  if (estreita) rotuloLarg = 150;
+  const lh = 26, mt = 4, H = itens.length * lh + mt * 2, textoLarg = estreita ? 118 : 150, pw = W - rotuloLarg - textoLarg;
   const mx = max || Math.max(1, ...itens.map((x) => x.v));
-  const corta = (t) => (t.length > 36 ? t.slice(0, 35) + '…' : t);
+  const lim = estreita ? 24 : 36, corta = (t) => (t.length > lim ? t.slice(0, lim - 1) + '…' : t);
   let s = `<svg class="grafico" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(titulo)}">`;
   itens.forEach((x, i) => {
     const y = mt + i * lh, w = Math.max(0, Math.min(1, x.v / mx)) * pw, dica = esc(x.dica ?? `${x.r}: ${x.txt ?? num(x.v)}`);

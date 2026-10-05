@@ -208,7 +208,7 @@ const rotCurto = (G, gran) => (gran === 'mes' ? rotMes(G.k) : fmtDataCurta(G.ini
 const gasto = (G) => G.cr + G.cl + G.pcr + G.pcl + G.outras;
 
 // ---------------------------------------------------------------- gráficos
-const W = 760, H = 280;
+let W = 760; const H = 280; // W cai para 430 no celular, para o gráfico caber inteiro na tela
 const abre = (rot) => `<svg class="grafico" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(rot)}">`;
 function eixoY(max, min, fmt, ml, mr, mt, ph) {
   let s = '';
@@ -217,7 +217,7 @@ function eixoY(max, min, fmt, ml, mr, mt, ph) {
 }
 function marcasMes(L, X, mt, ph) {
   // período curto: um rótulo por dia; período longo: um por mês
-  if (L.length <= 11) return L.map((p, i) => `<text x="${X(i)}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === L.length - 1 ? 'end' : 'middle'}">${DIAS_CURTO[diaSemanaNum(p.d)]} ${fmtDataCurta(p.d)}</text>`).join('');
+  if (L.length <= (W < 600 ? 5 : 11)) return L.map((p, i) => `<text x="${X(i)}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === L.length - 1 ? 'end' : 'middle'}">${DIAS_CURTO[diaSemanaNum(p.d)]} ${fmtDataCurta(p.d)}</text>`).join('');
   let s = '', ant = '';
   L.forEach((p, i) => {
     const m = mesDe(p.d); if (m === ant) return; ant = m;
@@ -238,7 +238,7 @@ function grafSaldo(base, S) {
   const linha = (s, f) => s.map((p, i) => (f(p, i) ? `${X(i).toFixed(1)},${Y(p.saldo).toFixed(1)}` : null)).filter(Boolean).join(' ');
   const iProj = B.findIndex((x) => x.proj), corte = iProj < 0 ? n - 1 : Math.max(0, iProj - 1);
   let s = abre('Saldo ao longo do período') + eixoY(max, min, brlCurto, ml, mr, mt, ph);
-  if (min < 0) s += `<line x1="${ml}" x2="${W - mr}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--vermelho)" stroke-width="1.2" stroke-dasharray="6 4"/><text x="${W - mr - 2}" y="${Y(0) - 5}" text-anchor="end" style="fill:var(--vermelho)">saldo zero (abaixo desta linha o saldo é negativo)</text>`;
+  if (min < 0) s += `<line x1="${ml}" x2="${W - mr}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--vermelho)" stroke-width="1.2" stroke-dasharray="6 4"/><text x="${W - mr - 2}" y="${Y(0) - 5}" text-anchor="end" style="fill:var(--vermelho)">${W < 600 ? 'saldo zero' : 'saldo zero (abaixo desta linha o saldo é negativo)'}</text>`;
   s += marcasMes(B, X, mt, ph);
   s += `<polyline fill="none" stroke="${VERDE}" stroke-width="2.5" points="${linha(B, (p, i) => i <= corte)}"/>`;
   if (iProj > 0) s += `<polyline fill="none" stroke="${CINZA}" stroke-width="2" stroke-dasharray="5 4" points="${linha(B, (p, i) => i >= corte)}"/>`;
@@ -310,18 +310,20 @@ function grafRosca(S, soReal) {
     ['Gasto projetado até o fim', VERDE_CLARO, soma(proj, (x) => x.cr + x.cl)], [soReal ? 'Saldo atual' : 'Saldo previsto no fim', AREIA, Math.max(0, S.saldoFim)]].filter((p) => p[2] > 0.005);
   const total = soma(partes, (p) => p[2]);
   if (!total) return vazio('Informe o recurso e os valores na aba "Recurso e valores" para ver a distribuição.');
-  const cx = 160, cy = H / 2, R = 112, r = 68, pt = (a, q) => `${(cx + q * Math.cos(a)).toFixed(2)},${(cy + q * Math.sin(a)).toFixed(2)}`;
+  const mini = W < 600, cx = mini ? 78 : 160, cy = mini ? 96 : H / 2, R = mini ? 66 : 112, r = mini ? 40 : 68, lx = mini ? 168 : 330, pt = (a, q) => `${(cx + q * Math.cos(a)).toFixed(2)},${(cy + q * Math.sin(a)).toFixed(2)}`;
   let s = abre('Destino do recurso'), a0 = -Math.PI / 2;
   partes.forEach(([nome, cor, v], i) => {
     const fr = v / total, a1 = a0 + fr * 2 * Math.PI, dica = `data-dica="${nome}: ${brl(v)} (${pc1(100 * fr)})"`;
     if (fr > 0.9995) s += `<circle cx="${cx}" cy="${cy}" r="${(R + r) / 2}" fill="none" stroke="${cor}" stroke-width="${R - r}" ${dica}/>`;
     else { const g = fr > 0.5 ? 1 : 0; s += `<path d="M${pt(a0, R)} A${R},${R} 0 ${g} 1 ${pt(a1, R)} L${pt(a1, r)} A${r},${r} 0 ${g} 0 ${pt(a0, r)} Z" fill="${cor}" stroke="var(--cartao)" stroke-width="1.5" ${dica}/>`; }
     a0 = a1;
-    const y = 62 + i * 38;
-    s += `<rect x="330" y="${y - 11}" width="14" height="14" rx="3" fill="${cor}"/><text x="352" y="${y}" style="font-size:13px">${nome}</text><text x="${W - 12}" y="${y}" text-anchor="end" style="font-size:13px;font-weight:700">${brl(v)}</text><text x="352" y="${y + 15}">${pc1(100 * fr)}</text>`;
+    const y = (mini ? 30 : 62) + i * (mini ? 44 : 38);
+    s += mini
+      ? `<rect x="${lx}" y="${y - 11}" width="12" height="12" rx="3" fill="${cor}"/><text x="${lx + 18}" y="${y}" style="font-size:12.5px">${nome}</text><text x="${lx + 18}" y="${y + 16}" style="font-size:12.5px;font-weight:700">${brl(v)} · ${pc1(100 * fr)}</text>`
+      : `<rect x="330" y="${y - 11}" width="14" height="14" rx="3" fill="${cor}"/><text x="352" y="${y}" style="font-size:13px">${nome}</text><text x="${W - 12}" y="${y}" text-anchor="end" style="font-size:13px;font-weight:700">${brl(v)}</text><text x="352" y="${y + 15}">${pc1(100 * fr)}</text>`;
   });
-  s += `<text x="${cx}" y="${cy - 4}" text-anchor="middle">total considerado</text><text x="${cx}" y="${cy + 16}" text-anchor="middle" style="font-size:17px;font-weight:700">${brlCurto(total)}</text>`;
-  if (S.saldoFim < -0.005) s += `<text x="330" y="${62 + partes.length * 38}" style="font-size:13px;font-weight:700;fill:var(--vermelho)">${soReal ? `Saldo atual negativo: ${brl(S.saldoFim)}` : `Faltam ${brl(-S.saldoFim)} para cobrir o período`}</text>`;
+  s += `<text x="${cx}" y="${cy - 4}" text-anchor="middle">${mini ? 'total' : 'total considerado'}</text><text x="${cx}" y="${cy + 16}" text-anchor="middle" style="font-size:${mini ? 14 : 17}px;font-weight:700">${brlCurto(total)}</text>`;
+  if (S.saldoFim < -0.005) s += `<text x="${mini ? 12 : 330}" y="${mini ? H - 14 : 62 + partes.length * 38}" style="font-size:${mini ? 12 : 13}px;font-weight:700;fill:var(--vermelho)">${soReal ? `Saldo atual negativo: ${brl(S.saldoFim)}` : `Faltam ${brl(-S.saldoFim)} para cobrir o período`}</text>`;
   return s + '</svg>';
 }
 
@@ -351,6 +353,7 @@ const segGran = () => `<div class="fin-seg" role="group" aria-label="Agrupar por
 
 /** Cartão com um gráfico por vez; as setas (ou os pontos) trocam o tipo. */
 function carrossel() {
+  W = matchMedia('(max-width: 860px)').matches ? 430 : 760;
   const { base, real, S } = E.calc, sim = E.aba === 'simulador', usa = sim ? S : real, k = GRAFS[E.graf];
   const lp = (l) => (sim ? l : []); // itens de legenda que só existem quando há projeção
   const G = agrupar(usa.linhas, E.gran, sim ? null : E.rel.ini, sim ? null : E.rel.fim);
