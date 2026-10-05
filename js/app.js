@@ -40,6 +40,8 @@ const ICO_LUA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stro
 const rotTema = () => (temaAtual() === 'escuro' ? `${ICO_SOL} Modo claro` : `${ICO_LUA} Modo escuro`);
 const botaoTema = (estilo = '') => `<button type="button" class="btn fantasma pequeno" data-tema-btn style="${estilo}">${rotTema()}</button>`;
 aplicarTema();
+// se o navegador ainda estiver com a página antiga guardada, garante a folha de estilos desta versão
+{ const l = document.querySelector('link[rel=stylesheet][href*="css/app.css"]'); if (l && !l.getAttribute('href').includes(VERSAO)) l.setAttribute('href', `css/app.css?v=${VERSAO}`); }
 document.addEventListener('click', (e) => {
   if (!e.target.closest('[data-tema-btn]')) return;
   const t = temaAtual() === 'escuro' ? 'claro' : 'escuro';
