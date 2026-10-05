@@ -90,7 +90,7 @@ export async function render(el, { cabecalho, perfil }) {
   };
   if (!ABAS.some(([k]) => k === E.aba)) E.aba = 'relatorio';
   if (!GRAN[E.gran]) E.gran = 'mes';
-  if (!(E.cfg.creditos.length && E.cfg.precos.length)) { E.aba = 'recurso'; E.editando = true; }
+  if (!E.cfg.precos.length) { E.aba = 'recurso'; E.editando = true; }
   E.rel = { ini: E.cfg.inicio, fim: E.hoje < E.cfg.inicio ? E.cfg.fim : E.hoje };
   iniciarSim();
   desenhar();
@@ -366,16 +366,17 @@ function desenhar() {
   const { el, cfg } = E, { base } = recalc();
   const orc = soma(cfg.creditos, (x) => num(x.valor)), outras = soma(cfg.despesas.filter((x) => x.data <= E.hoje), (x) => num(x.valor));
   const feitas = base.linhas.filter((x) => !x.proj), qr = soma(feitas, (x) => x.r), ql = soma(feitas, (x) => x.l), consumo = soma(feitas, (x) => x.cr + x.cl);
-  const semDados = !cfg.creditos.length || !cfg.precos.length;
+  const semPrecos = !cfg.precos.length, semCredito = !cfg.creditos.length;
   el.innerHTML = `
 <div class="so-impressao"><h2>PASES · Financeiro · ${ABAS.find(([k]) => k === E.aba)[1]} · emitido em ${fmtData(E.hoje)}</h2></div>
-${semDados ? '<div class="caixa aviso-caixa" style="margin-bottom:12px">Informe na aba <b>Recurso e valores</b> o recurso disponível e o valor do almoço e do lanche para o sistema calcular consumo, saldo e projeções.</div>' : ''}
+${semPrecos ? '<div class="caixa aviso-caixa" style="margin-bottom:12px">Informe na aba <b>Recurso e valores</b> o valor do almoço e do lanche para o sistema calcular o consumo. O recurso pode ser lançado depois.</div>'
+    : semCredito ? '<div class="caixa aviso-caixa" style="margin-bottom:12px"><b>Recurso ainda não lançado.</b> O consumo já é calculado e o saldo fica negativo até o crédito ser lançado na aba <b>Recurso e valores</b>, o que pode ser feito com data retroativa.</div>' : ''}
 <div class="kpis">
-<div class="kpi"><span>Recurso destinado</span><b>${brl(orc)}</b><small>${esc(cfg.fonte || '')}${cfg.creditos.length > 1 ? ` · ${cfg.creditos.length} lançamentos` : ''}</small></div>
+<div class="kpi"><span>Recurso destinado</span><b>${semCredito ? 'A lançar' : brl(orc)}</b><small>${esc(cfg.fonte || '')}${cfg.creditos.length > 1 ? ` · ${cfg.creditos.length} lançamentos` : ''}</small></div>
 <div class="kpi"><span>Consumido até hoje</span><b>${brl(consumo)}</b><small>${fmtNum(qr)} almoços · ${fmtNum(ql)} lanches${outras ? ` · + ${brl(outras)} em outras despesas` : ''}</small></div>
 <div class="kpi ${base.saldoHoje < 0 ? 'kpi-alerta' : ''}"><span>Saldo hoje</span><b>${brl(base.saldoHoje)}</b><small>${orc ? `${Math.max(0, Math.round((100 * base.saldoHoje) / orc))}% do recurso` : ''}</small></div>
 <div class="kpi ${base.saldoFim < 0 ? 'kpi-alerta' : ''}"><span>Projeção em ${fmtData(cfg.fim)}</span><b>${brl(base.saldoFim)}</b><small>no ritmo atual: ${fmtNum(Math.round(E.base.r))} almoços e ${fmtNum(Math.round(E.base.l))} lanches por dia</small></div>
-<div class="kpi ${base.acaba ? 'kpi-alerta' : ''}"><span>${base.acaba ? 'O recurso acaba em' : 'O recurso cobre o período'}</span><b>${base.acaba ? fmtData(base.acaba) : 'Sim'}</b><small>${base.diasFut} dia(s) úteis de atendimento restantes</small></div>
+<div class="kpi ${base.acaba && !semCredito ? 'kpi-alerta' : ''}"><span>${semCredito ? 'Necessário até ' + fmtData(cfg.fim) : base.acaba ? 'O recurso acaba em' : 'O recurso cobre o período'}</span><b>${semCredito ? brl(Math.max(0, -base.saldoFim)) : base.acaba ? fmtData(base.acaba) : 'Sim'}</b><small>${base.diasFut} dia(s) úteis de atendimento restantes</small></div>
 </div>
 <div class="abas" id="fin-abas">${ABAS.map(([k, t]) => `<button data-aba="${k}" class="${k === E.aba ? 'ativo' : ''}">${t}</button>`).join('')}</div>
 <div id="fin-corpo">${E.aba === 'relatorio' ? telaRelatorio() : E.aba === 'simulador' ? telaSimulador() : telaRecurso()}</div>`;
@@ -521,7 +522,7 @@ function formCfg() {
   return `<div class="barra-filtros" style="margin-top:10px"><label class="campo" style="min-width:300px"><span>Origem do recurso</span><input type="text" id="fc-fonte" value="${esc(c.fonte || '')}" maxlength="120"></label>
 <label class="campo"><span>Início do período</span><input type="date" id="fc-ini" value="${c.inicio}"></label>
 <label class="campo"><span>Fim do período (último dia de atendimento)</span><input type="date" id="fc-fim" value="${c.fim}"></label></div>
-<h3>Recurso destinado à assistência estudantil</h3><p class="pequeno mudo" style="margin:2px 0 8px">Lance o valor total ou cada parcela recebida (data, descrição, valor).</p>
+<h3>Recurso destinado à assistência estudantil</h3><p class="pequeno mudo" style="margin:2px 0 8px">Lance o valor total ou cada parcela recebida (data, descrição, valor). Pode ficar em branco e ser lançado depois, com a data em que o crédito de fato ocorreu.</p>
 <div data-grupo="creditos">${(c.creditos.length ? c.creditos : [{}]).map((x) => lanc('creditos', x)).join('')}</div><button type="button" class="btn pequeno" data-add="creditos">${ico('mais')} Adicionar crédito</button>
 <h3 style="margin-top:16px">Valor do almoço e do lanche</h3><p class="pequeno mudo" style="margin:2px 0 8px">Se o valor mudar (novo contrato ou reajuste), adicione outra linha com a data em que passa a valer.</p>
 <div data-grupo="precos">${(c.precos.length ? c.precos : [{}]).map(prc).join('')}</div><button type="button" class="btn pequeno" data-add="precos">${ico('mais')} Adicionar valor</button>
@@ -551,7 +552,6 @@ function ligarCfg() {
     const precos = ler('precos', ['desde', 'refeicao', 'lanche']).filter((x) => x.desde && (x.refeicao !== '' || x.lanche !== '')).map((x) => ({ desde: x.desde, refeicao: num(x.refeicao), lanche: num(x.lanche) })).sort((a, b) => a.desde.localeCompare(b.desde));
     const inicio = $('#fc-ini', box).value, fim = $('#fc-fim', box).value;
     if (!inicio || !fim || inicio > fim) return aviso('Confira o início e o fim do período.', 'erro');
-    if (!creditos.length) return aviso('Lance pelo menos um crédito com valor.', 'erro');
     if (!precos.length) return aviso('Informe o valor do almoço e do lanche.', 'erro');
     const pc = (v) => Math.max(0, Math.min(100, num(v)));
     const proj = modo.value === 'fixo' ? { modo: 'fixo', taxaR: pc($('#fc-tr', box).value), taxaL: pc($('#fc-tl', box).value) } : { modo: modo.value };
