@@ -87,7 +87,7 @@ function aoEstado(m) {
       mostrar(`<div class="fotos uma"><div class="foto">${m.foto ? `<img src="${m.foto}" alt="">` : 'Sem foto de cadastro'}<span>Cadastro</span></div></div>
         <div class="nome">${esc(m.nome)}</div><div class="sub">Matrícula ${esc(m.matricula || '')}<br>${esc(m.curso || '')}</div>
         ${escolha(m.tipoSel, m.md)}
-        ${m.porCpf ? `<p class="grande">${m.passo === 2 ? 'Aguarde: o atendente vai confirmar' : 'Fique de frente para a câmera'}</p><p>Pelo CPF, quem confirma o registro é o atendente.</p>` : `<p class="grande">Confirme com <span class="tecla">ENTER</span></p>`}
+        ${(m.atendente || m.porCpf) ? `<p class="grande">${m.passo === 2 ? 'Aguarde: o atendente vai confirmar' : 'Fique de frente para a câmera'}</p><p>Quem confirma este registro é o atendente.</p>` : `<p class="grande">Confirme com <span class="tecla">ENTER</span></p>`}
         <p>Não é você? Tecle <span class="tecla">ESC</span> ou <span class="tecla">-</span>.</p>`, 'ok'); break; }
     case 'cpf':
       mostrar(`<h2>Digite seu CPF</h2><div class="cpf" id="cpf">&nbsp;</div><p>Ao digitar o último número, seus dados aparecem para você confirmar.</p>`); break;
