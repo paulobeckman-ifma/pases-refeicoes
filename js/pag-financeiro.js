@@ -50,24 +50,24 @@ export async function render(el, { cabecalho, perfil }) {
 .fin .kpi b{font-size:21px;white-space:nowrap}
 .fin .kpis{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
 .fin .tabela{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
-.fin .tabela th,.fin .tabela td{border:1px solid rgba(60,50,20,.11);padding:7px 10px;vertical-align:middle}
+.fin .tabela th,.fin .tabela td{border:1px solid var(--linha);padding:7px 10px;vertical-align:middle}
 .fin .tabela th.num,.fin .tabela td.num{text-align:right}
 .fin .tabela th{white-space:normal;line-height:1.25}
 .fin .tabela td{white-space:nowrap}
 .fin .tabela th.cen,.fin .tabela td.cen{text-align:center}
-.fin .tabela tbody tr:nth-child(even) td{background:rgba(60,50,20,.028)}
-.fin .tabela tfoot td{font-weight:700;border-top:2px solid rgba(60,50,20,.25)}
+.fin .tabela tbody tr:nth-child(even) td{background:var(--superficie-2, #fafbfa)}
+.fin .tabela tfoot td{font-weight:700;border-top:2px solid var(--tinta-3)}
 .fin .tabela input{width:100%;min-width:70px;padding:5px 7px;text-align:right;box-sizing:border-box}
 .fin .tabela td.proj{color:var(--tinta-3,#7a807c)}
 .fin-nav{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .fin-nav h2{margin:0;flex:1;text-align:center}
 .fin-nav .btn{padding:5px 9px}
 .fin-pontos{display:flex;justify-content:center;gap:7px;margin-top:10px}
-.fin-pontos button{width:9px;height:9px;border-radius:50%;border:0;padding:0;background:rgba(60,50,20,.2);cursor:pointer}
+.fin-pontos button{width:9px;height:9px;border-radius:50%;border:0;padding:0;background:var(--linha);cursor:pointer}
 .fin-pontos button.ativo{background:var(--verde)}
-.fin-seg{display:inline-flex;border:1px solid rgba(60,50,20,.22);border-radius:8px;overflow:hidden;background:#fff}
+.fin-seg{display:inline-flex;border:1px solid var(--linha);border-radius:8px;overflow:hidden;background:var(--superficie,#fff)}
 .fin-seg button{border:0;background:transparent;padding:7px 13px;cursor:pointer;font:inherit;color:inherit}
-.fin-seg button+button{border-left:1px solid rgba(60,50,20,.14)}
+.fin-seg button+button{border-left:1px solid var(--linha)}
 .fin-seg button.ativo{background:var(--verde);color:#fff}
 .fin-leg{display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:center;margin-top:6px}
 @media print{.fin .abas,.fin-pontos,.fin-nav .btn,.fin .fin-seg{display:none!important}.fin .tabela th,.fin .tabela td{padding:4px 6px}}
@@ -315,7 +315,7 @@ function grafRosca(S, soReal) {
   partes.forEach(([nome, cor, v], i) => {
     const fr = v / total, a1 = a0 + fr * 2 * Math.PI, dica = `data-dica="${nome}: ${brl(v)} (${pc1(100 * fr)})"`;
     if (fr > 0.9995) s += `<circle cx="${cx}" cy="${cy}" r="${(R + r) / 2}" fill="none" stroke="${cor}" stroke-width="${R - r}" ${dica}/>`;
-    else { const g = fr > 0.5 ? 1 : 0; s += `<path d="M${pt(a0, R)} A${R},${R} 0 ${g} 1 ${pt(a1, R)} L${pt(a1, r)} A${r},${r} 0 ${g} 0 ${pt(a0, r)} Z" fill="${cor}" stroke="#fff" stroke-width="1.5" ${dica}/>`; }
+    else { const g = fr > 0.5 ? 1 : 0; s += `<path d="M${pt(a0, R)} A${R},${R} 0 ${g} 1 ${pt(a1, R)} L${pt(a1, r)} A${r},${r} 0 ${g} 0 ${pt(a0, r)} Z" fill="${cor}" stroke="var(--cartao)" stroke-width="1.5" ${dica}/>`; }
     a0 = a1;
     const y = 62 + i * 38;
     s += `<rect x="330" y="${y - 11}" width="14" height="14" rx="3" fill="${cor}"/><text x="352" y="${y}" style="font-size:13px">${nome}</text><text x="${W - 12}" y="${y}" text-anchor="end" style="font-size:13px;font-weight:700">${brl(v)}</text><text x="352" y="${y + 15}">${pc1(100 * fr)}</text>`;
@@ -340,7 +340,7 @@ function grafComp() {
     const m = tm[k];
     s += `<line x1="${ml}" x2="${W - mr}" y1="${Y(m)}" y2="${Y(m)}" stroke="${cor}" stroke-width="1.3" stroke-dasharray="4 4" opacity=".75"/><text x="${W - mr - 2}" y="${Y(m) - 4}" text-anchor="end" style="fill:${cor}">média ${pc1(m)}</text>`;
     if (n > 1) s += `<polyline fill="none" stroke="${cor}" stroke-width="2.2" points="${L.map((x, i) => `${X(i).toFixed(1)},${Y(val(x, k, tot)).toFixed(1)}`).join(' ')}"/>`;
-    L.forEach((x, i) => { s += `<circle cx="${X(i).toFixed(1)}" cy="${Y(val(x, k, tot)).toFixed(1)}" r="${n > 40 ? 2.5 : 4}" fill="${cor}" stroke="#fff" stroke-width="1" data-dica="${DIAS_CURTO[diaSemanaNum(x.d)]} ${fmtData(x.d)} · ${nome}: ${fmtNum(x[k])} de ${fmtNum(tot)} (${pc1(val(x, k, tot))})${x.d === E.hoje ? ' · hoje, parcial' : ''}"/>`; });
+    L.forEach((x, i) => { s += `<circle cx="${X(i).toFixed(1)}" cy="${Y(val(x, k, tot)).toFixed(1)}" r="${n > 40 ? 2.5 : 4}" fill="${cor}" stroke="var(--cartao)" stroke-width="1" data-dica="${DIAS_CURTO[diaSemanaNum(x.d)]} ${fmtData(x.d)} · ${nome}: ${fmtNum(x[k])} de ${fmtNum(tot)} (${pc1(val(x, k, tot))})${x.d === E.hoje ? ' · hoje, parcial' : ''}"/>`; });
   });
   return s + '</svg>';
 }

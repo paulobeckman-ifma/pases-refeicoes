@@ -81,7 +81,7 @@ export function colunas(cats, series, { altura = 240, largura = 760, titulo = ''
     const pts = l.v.map((v, i) => (v == null ? null : [cx(i), Y(v), v, i])).filter(Boolean);
     if (!pts.length) return;
     if (pts.length > 1) s += `<polyline fill="none" stroke="${l.cor}" stroke-width="2" ${l.tracejada ? 'stroke-dasharray="5 4"' : ''} points="${pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')}"/>`;
-    pts.forEach((p) => { s += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${n > 40 ? 2 : 3.5}" fill="${l.cor}" stroke="#fff" stroke-width="1" data-dica="${esc(`${cats[p[3]].dica || cats[p[3]].r} · ${l.nome}: ${fmt(p[2])}`)}"/>`; });
+    pts.forEach((p) => { s += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${n > 40 ? 2 : 3.5}" fill="${l.cor}" stroke="var(--cartao)" stroke-width="1" data-dica="${esc(`${cats[p[3]].dica || cats[p[3]].r} · ${l.nome}: ${fmt(p[2])}`)}"/>`; });
   });
   return s + '</svg>';
 }
@@ -99,7 +99,7 @@ export function barrasH(itens, { largura = 760, titulo = '', max = null, rotuloL
   itens.forEach((x, i) => {
     const y = mt + i * lh, w = Math.max(0, Math.min(1, x.v / mx)) * pw, dica = esc(x.dica ?? `${x.r}: ${x.txt ?? num(x.v)}`);
     s += `<text x="${rotuloLarg - 8}" y="${y + 17}" text-anchor="end">${esc(corta(String(x.r)))}</text>`;
-    s += `<rect x="${rotuloLarg}" y="${y + 6}" width="${pw}" height="14" rx="4" fill="rgba(60,50,20,.07)" data-dica="${dica}"/>`;
+    s += `<rect x="${rotuloLarg}" y="${y + 6}" width="${pw}" height="14" rx="4" fill="var(--neutro, #eef1f0)" data-dica="${dica}"/>`;
     if (w > 0) s += `<rect x="${rotuloLarg}" y="${y + 6}" width="${w.toFixed(1)}" height="14" rx="4" fill="${x.cor || cor}" data-dica="${dica}"/>`;
     s += `<text x="${rotuloLarg + pw + 8}" y="${y + 17}">${esc(x.txt ?? num(x.v))}</text>`;
   });
